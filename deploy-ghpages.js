@@ -1,118 +1,165 @@
 /**
- * deploy-ghpages.js
- * Alternative à gh-pages qui évite l'erreur ENAMETOOLONG sur Windows
- * Usage : node deploy-ghpages.js
+ * deploy-ghpages.js — Fix ENAMETOOLONG Windows
+ * Placer à la racine du projet (même niveau que package.json)
  */
 
 const { execSync } = require("child_process");
 const fs   = require("fs");
 const path = require("path");
 
-const DIST_DIR   = path.resolve(__dirname, "dist");
-const BRANCH     = "gh-pages";
-const COMMIT_MSG = `deploy: ${new Date().toISOString()}`;
+// __dirname = dossier où se trouve CE script = racine du projet
+const PROJECT_ROOT = __dirname;
+const DIST_DIR     = path.join(PROJECT_ROOT, "dist");
+const BRANCH       = "gh-pages";
+const COMMIT_MSG   = `deploy: ${new Date().toISOString()}`;
 
 function run(cmd, opts = {}) {
   console.log(`  > ${cmd}`);
-  return execSync(cmd, { stdio: "inherit", ...opts });
+  execSync(cmd, { stdio: "inherit", cwd: PROJECT_ROOT, ...opts });
 }
 
 function runCapture(cmd) {
-  return execSync(cmd, { encoding: "utf8" }).trim();
+  return execSync(cmd, { encoding: "utf8", cwd: PROJECT_ROOT }).trim();
 }
 
-// 1. Vérifier que dist/ existe
+// ── 1. Vérifier dist/ AVANT de toucher à git ────────────────
 if (!fs.existsSync(DIST_DIR)) {
-  console.error("❌ Le dossier dist/ n'existe pas. Lancez d'abord : npm run build");
+  console.error("❌  dist/ introuvable. Lancez d'abord : npm run build");
   process.exit(1);
 }
 
-// 2. Activer le support des chemins longs sur Windows
-try {
-  run("git config core.longpaths true");
-} catch (_) {}
+const distFiles = fs.readdirSync(DIST_DIR);
+if (distFiles.length === 0) {
+  console.error("❌  dist/ est vide. Relancez : npm run build");
+  process.exit(1);
+}
 
-// 3. Récupérer l'URL remote origin
+console.log(`✅  dist/ trouvé (${distFiles.length} fichiers)`);
+
+// ── 2. Activer chemins longs ─────────────────────────────────
+try { run("git config core.longpaths true"); } catch (_) {}
+
+// ── 3. Remote origin ─────────────────────────────────────────
 let remoteUrl;
 try {
   remoteUrl = runCapture("git remote get-url origin");
-  console.log(`🔗 Remote : ${remoteUrl}`);
+  console.log(`🔗  Remote : ${remoteUrl}`);
 } catch (_) {
-  console.error("❌ Pas de remote 'origin' configuré. Faites : git remote add origin <URL>");
+  console.error("❌  Pas de remote 'origin'. Faites : git remote add origin <URL>");
   process.exit(1);
 }
 
-// 4. Sauvegarder la branche courante
-let currentBranch;
-try {
-  currentBranch = runCapture("git branch --show-current");
-} catch (_) {
-  currentBranch = "main";
+// ── 4. Branche courante (pour revenir après) ─────────────────
+let currentBranch = "main";
+try { currentBranch = runCapture("git branch --show-current"); } catch (_) {}
+console.log(`📌  Branche actuelle : ${currentBranch}`);
+
+// ── 5. Sauvegarder dist/ en mémoire ─────────────────────────
+//    On lit tout maintenant, AVANT de changer de branche
+console.log("\n📦  Lecture du contenu de dist/...");
+
+function readDirRecursive(dir) {
+  const result = {};
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      result[entry.name] = readDirRecursive(fullPath);
+    } else {
+      result[entry.name] = fs.readFileSync(fullPath);
+      console.log(`   ✓ ${entry.name}`);
+    }
+  }
+  return result;
 }
 
-console.log(`\n🚀 Déploiement vers la branche ${BRANCH}...\n`);
+const distContents = readDirRecursive(DIST_DIR);
 
-// 5. Vérifier si la branche gh-pages existe déjà
-let branchExists = false;
+// ── 6. Fonction pour écrire le contenu en mémoire sur disque ─
+function writeDirContents(contents, destDir) {
+  fs.mkdirSync(destDir, { recursive: true });
+  for (const [name, value] of Object.entries(contents)) {
+    const dest = path.join(destDir, name);
+    if (Buffer.isBuffer(value)) {
+      fs.writeFileSync(dest, value);
+    } else {
+      writeDirContents(value, dest);
+    }
+  }
+}
+
+// ── 7. Basculer sur gh-pages (orpheline) ─────────────────────
+console.log(`\n🌿  Création de la branche orpheline ${BRANCH}...`);
+
 try {
-  runCapture(`git show-ref --verify refs/heads/${BRANCH}`);
-  branchExists = true;
-} catch (_) {}
+  // Stash les changements non commités si besoin
+  try { run("git stash --include-untracked"); } catch(_) {}
 
-try {
-  if (branchExists) {
-    // 6a. Basculer sur gh-pages et y copier dist/
-    run(`git checkout ${BRANCH}`);
-    
-    // Supprimer tous les fichiers trackés sauf .git
-    try {
-      run("git rm -rf . --quiet");
-    } catch (_) {}
+  run(`git checkout --orphan ${BRANCH}`);
 
-  } else {
-    // 6b. Créer une branche orpheline gh-pages
-    run(`git checkout --orphan ${BRANCH}`);
-    try { run("git rm -rf . --quiet"); } catch (_) {}
+  // Supprimer TOUT (index git) — les fichiers physiques restent
+  try { run("git rm -rf . --quiet"); } catch (_) {}
+
+  // Supprimer les fichiers physiques restants (hors .git)
+  for (const entry of fs.readdirSync(PROJECT_ROOT, { withFileTypes: true })) {
+    if (entry.name === ".git") continue;
+    const p = path.join(PROJECT_ROOT, entry.name);
+    fs.rmSync(p, { recursive: true, force: true });
   }
-
-  // 7. Copier les fichiers de dist/ à la racine
-  console.log("\n📁 Copie des fichiers dist/ → racine...");
-  const files = fs.readdirSync(DIST_DIR);
-  for (const file of files) {
-    const src  = path.join(DIST_DIR, file);
-    const dest = path.join(process.cwd(), file);
-    fs.cpSync(src, dest, { recursive: true });
-    console.log(`   ✓ ${file}`);
-  }
-
-  // 8. Ajouter un .nojekyll pour désactiver Jekyll GitHub Pages
-  fs.writeFileSync(".nojekyll", "");
-  console.log("   ✓ .nojekyll");
-
-  // 9. Committer fichier par fichier (évite ENAMETOOLONG)
-  console.log("\n📝 Commit des fichiers (un par un)...");
-  for (const file of [...files, ".nojekyll"]) {
-    try {
-      run(`git add "${file}"`, { stdio: "pipe" });
-    } catch (_) {}
-  }
-
-  run(`git commit -m "${COMMIT_MSG}"`);
-
-  // 10. Push
-  console.log("\n📤 Push vers origin gh-pages...");
-  run(`git push origin ${BRANCH} --force`);
-
-  // 11. Revenir sur la branche d'origine
-  run(`git checkout ${currentBranch}`);
-
-  console.log(`\n✅ Déploiement réussi !`);
-  console.log(`   Branche : ${BRANCH}`);
-  console.log(`   Activez GitHub Pages dans Settings → Pages → Source : ${BRANCH}`);
 
 } catch (err) {
-  console.error("\n❌ Erreur pendant le déploiement :", err.message);
-  // Tenter de revenir sur la branche d'origine
-  try { execSync(`git checkout ${currentBranch}`, { stdio: "pipe" }); } catch (_) {}
+  console.error("❌  Erreur lors du checkout gh-pages :", err.message);
+  try { execSync(`git checkout ${currentBranch}`, { cwd: PROJECT_ROOT, stdio: "pipe" }); } catch(_) {}
+  try { execSync("git stash pop", { cwd: PROJECT_ROOT, stdio: "pipe" }); } catch(_) {}
   process.exit(1);
 }
+
+// ── 8. Écrire le contenu de dist/ à la racine ────────────────
+console.log("\n📁  Écriture des fichiers...");
+try {
+  writeDirContents(distContents, PROJECT_ROOT);
+  fs.writeFileSync(path.join(PROJECT_ROOT, ".nojekyll"), "");
+  console.log("   ✓ .nojekyll");
+} catch (err) {
+  console.error("❌  Erreur écriture fichiers :", err.message);
+  try { execSync(`git checkout ${currentBranch}`, { cwd: PROJECT_ROOT, stdio: "pipe" }); } catch(_) {}
+  process.exit(1);
+}
+
+// ── 9. Git add + commit (fichier par fichier) ─────────────────
+console.log("\n📝  Commit...");
+try {
+  const toAdd = [...Object.keys(distContents), ".nojekyll"];
+  for (const f of toAdd) {
+    try { run(`git add "${f}"`); } catch (_) {}
+  }
+  run(`git commit -m "${COMMIT_MSG}"`);
+} catch (err) {
+  console.error("❌  Erreur commit :", err.message);
+  try { execSync(`git checkout ${currentBranch}`, { cwd: PROJECT_ROOT, stdio: "pipe" }); } catch(_) {}
+  process.exit(1);
+}
+
+// ── 10. Push force ───────────────────────────────────────────
+console.log("\n📤  Push...");
+try {
+  run(`git push origin ${BRANCH} --force`);
+} catch (err) {
+  console.error("❌  Erreur push :", err.message);
+  try { execSync(`git checkout ${currentBranch}`, { cwd: PROJECT_ROOT, stdio: "pipe" }); } catch(_) {}
+  process.exit(1);
+}
+
+// ── 11. Retour sur la branche principale ─────────────────────
+console.log(`\n🔙  Retour sur ${currentBranch}...`);
+run(`git checkout ${currentBranch}`);
+try { run("git stash pop"); } catch(_) {} // restaurer stash si besoin
+
+console.log(`
+✅  Déploiement réussi sur la branche ${BRANCH} !
+
+Prochaines étapes :
+  1. GitHub → Settings → Pages → Source : branche "${BRANCH}", dossier "/ (root)"
+  2. Votre add-in sera disponible sur :
+     https://miensie.github.io/ESG/taskpane.html
+  3. Mettez à jour YOUR-DOMAIN dans manifest.xml avec cette URL
+`);

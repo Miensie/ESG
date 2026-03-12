@@ -1,23 +1,22 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
-  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
-  xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
-  xsi:type="TaskPaneApp">
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+           xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
+           xsi:type="TaskPaneApp">
 
-  <Id>esg-analyzer-addin-2024-v1</Id>
+  <Id>C7D2E8F1-3A4B-4C5D-8E9F-0A1B2C3D4E5F</Id>
   <Version>1.0.0.0</Version>
-  <ProviderName>ESG Analytics</ProviderName>
+  <ProviderName>ESG Analytics Pro</ProviderName>
   <DefaultLocale>fr-FR</DefaultLocale>
   <DisplayName DefaultValue="ESG Analyzer Pro"/>
-  <Description DefaultValue="Analyse ESG automatisée : bilan carbone, indicateurs KPI, tableaux de bord et rapports intégrés dans Excel."/>
-
-  <IconUrl DefaultValue="https://miensie.github.io/ESG/assets/icon-32.png"/>
-  <HighResolutionIconUrl DefaultValue="https://miensie.github.io/ESG/assets/icon-80.png"/>
-  <SupportUrl DefaultValue="https://miensie.github.io/ESG/support"/>
+  <Description DefaultValue="Automatisez votre bilan carbone ESG : collecte, calcul Scope 1/2/3, tableaux de bord et rapports depuis Excel."/>
+  <IconUrl DefaultValue="https://miensie.github.io/ESG/icon-32.png"/>
+  <HighResolutionIconUrl DefaultValue="https://miensie.github.io/ESG/icon-80.png"/>
+  <SupportUrl DefaultValue="https://miensie.github.io/ESG"/>
 
   <AppDomains>
-    <AppDomain>https://miensie.github.io/ESG</AppDomain>
+    <AppDomain>https://miensie.github.io</AppDomain>
   </AppDomains>
 
   <Hosts>
@@ -49,11 +48,11 @@
                   <bt:Image size="32" resid="Icon.32x32"/>
                   <bt:Image size="80" resid="Icon.80x80"/>
                 </Icon>
-                <Control xsi:type="Button" id="TaskpaneButton">
-                  <Label resid="TaskpaneButton.Label"/>
+                <Control xsi:type="Button" id="BtnESG">
+                  <Label resid="BtnESG.Label"/>
                   <Supertip>
-                    <Title resid="TaskpaneButton.Label"/>
-                    <Description resid="TaskpaneButton.Tooltip"/>
+                    <Title resid="BtnESG.Label"/>
+                    <Description resid="BtnESG.Tooltip"/>
                   </Supertip>
                   <Icon>
                     <bt:Image size="16" resid="Icon.16x16"/>
@@ -61,38 +60,8 @@
                     <bt:Image size="80" resid="Icon.80x80"/>
                   </Icon>
                   <Action xsi:type="ShowTaskpane">
-                    <TaskpaneId>ButtonId1</TaskpaneId>
+                    <TaskpaneId>ESGTaskpane</TaskpaneId>
                     <SourceLocation resid="Taskpane.Url"/>
-                  </Action>
-                </Control>
-                <Control xsi:type="Button" id="CalcCarbonButton">
-                  <Label resid="CalcCarbon.Label"/>
-                  <Supertip>
-                    <Title resid="CalcCarbon.Label"/>
-                    <Description resid="CalcCarbon.Tooltip"/>
-                  </Supertip>
-                  <Icon>
-                    <bt:Image size="16" resid="Icon.16x16"/>
-                    <bt:Image size="32" resid="Icon.32x32"/>
-                    <bt:Image size="80" resid="Icon.80x80"/>
-                  </Icon>
-                  <Action xsi:type="ExecuteFunction">
-                    <FunctionName>quickCarbonCalc</FunctionName>
-                  </Action>
-                </Control>
-                <Control xsi:type="Button" id="DashboardButton">
-                  <Label resid="Dashboard.Label"/>
-                  <Supertip>
-                    <Title resid="Dashboard.Label"/>
-                    <Description resid="Dashboard.Tooltip"/>
-                  </Supertip>
-                  <Icon>
-                    <bt:Image size="16" resid="Icon.16x16"/>
-                    <bt:Image size="32" resid="Icon.32x32"/>
-                    <bt:Image size="80" resid="Icon.80x80"/>
-                  </Icon>
-                  <Action xsi:type="ExecuteFunction">
-                    <FunctionName>generateDashboard</FunctionName>
                   </Action>
                 </Control>
               </Group>
@@ -108,22 +77,18 @@
         <bt:Image id="Icon.80x80" DefaultValue="https://miensie.github.io/ESG/icon-80.png"/>
       </bt:Images>
       <bt:Urls>
-        <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://miensie.github.io/ESG/docs"/>
-        <bt:Url id="Commands.Url" DefaultValue="https://miensie.github.io/ESG/commands.html"/>
-        <bt:Url id="Taskpane.Url" DefaultValue="https://miensie.github.io/ESG/taskpane.html"/>
+        <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://go.microsoft.com/fwlink/?LinkId=276812"/>
+        <bt:Url id="Commands.Url"            DefaultValue="https://miensie.github.io/ESG/commands.html"/>
+        <bt:Url id="Taskpane.Url"            DefaultValue="https://miensie.github.io/ESG/taskpane.html"/>
       </bt:Urls>
       <bt:ShortStrings>
-        <bt:String id="GetStarted.Title" DefaultValue="ESG Analyzer Pro"/>
+        <bt:String id="GetStarted.Title"    DefaultValue="ESG Analyzer Pro activé !"/>
         <bt:String id="CommandsGroup.Label" DefaultValue="ESG Analytics"/>
-        <bt:String id="TaskpaneButton.Label" DefaultValue="Ouvrir ESG"/>
-        <bt:String id="CalcCarbon.Label" DefaultValue="Bilan Carbone"/>
-        <bt:String id="Dashboard.Label" DefaultValue="Dashboard"/>
+        <bt:String id="BtnESG.Label"        DefaultValue="ESG Analyzer"/>
       </bt:ShortStrings>
       <bt:LongStrings>
-        <bt:String id="GetStarted.Description" DefaultValue="Analysez vos données ESG directement dans Excel."/>
-        <bt:String id="TaskpaneButton.Tooltip" DefaultValue="Ouvre le panneau ESG Analyzer Pro."/>
-        <bt:String id="CalcCarbon.Tooltip" DefaultValue="Calcule le bilan carbone (Scopes 1, 2, 3) depuis la feuille active."/>
-        <bt:String id="Dashboard.Tooltip" DefaultValue="Génère un tableau de bord ESG avec graphiques et KPI."/>
+        <bt:String id="GetStarted.Description" DefaultValue="Analyse ESG et bilan carbone Scope 1/2/3 intégrés dans Excel."/>
+        <bt:String id="BtnESG.Tooltip"         DefaultValue="Ouvrir le panneau ESG Analyzer Pro"/>
       </bt:LongStrings>
     </Resources>
   </VersionOverrides>
