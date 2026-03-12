@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ESG Analyzer Pro</title>
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js" type="text/javascript"></script>
+  <link rel="stylesheet" href="taskpane.css"/>
+</head>
+<body>
+
+<!-- ============================================================
+     HEADER
+     ============================================================ -->
+<header class="app-header">
+  <div class="header-top">
+    <div class="logo-mark">
+      <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+        <path d="M8 1L2 4v4c0 3.3 2.6 6.4 6 7 3.4-.6 6-3.7 6-7V4L8 1z"/>
+      </svg>
+    </div>
+    <div class="app-title">ESG <span>Analyzer</span></div>
+    <div class="version-badge">v1.0</div>
+  </div>
+  <nav class="nav-tabs" id="nav-tabs">
+    <button class="nav-tab active" data-panel="collect">📥 Collecte</button>
+    <button class="nav-tab" data-panel="carbon">🌍 Carbone</button>
+    <button class="nav-tab" data-panel="dashboard">📊 Board</button>
+    <button class="nav-tab" data-panel="analysis">🔍 Analyse</button>
+    <button class="nav-tab" data-panel="report">📄 Rapport</button>
+  </nav>
+</header>
+
+<main class="app-body">
+
+  <!-- ============================================================
+       PANEL 1 — COLLECTE DES DONNÉES
+       ============================================================ -->
+  <section class="panel active" id="panel-collect">
+
+    <div class="section-title">Sources de données</div>
+
+    <div id="sources-list">
+      <div class="source-item" data-source="energie" onclick="configureSource('energie')">
+        <div class="source-icon" style="background:rgba(255,184,0,0.15);">⚡</div>
+        <div class="source-info">
+          <div class="source-name">Consommation Énergie</div>
+          <div class="source-range" id="range-energie">Non configuré</div>
+        </div>
+        <div class="source-status" id="status-energie"></div>
+      </div>
+      <div class="source-item" data-source="transport" onclick="configureSource('transport')">
+        <div class="source-icon" style="background:rgba(0,184,212,0.15);">🚛</div>
+        <div class="source-info">
+          <div class="source-name">Transport & Logistique</div>
+          <div class="source-range" id="range-transport">Non configuré</div>
+        </div>
+        <div class="source-status" id="status-transport"></div>
+      </div>
+      <div class="source-item" data-source="emissions" onclick="configureSource('emissions')">
+        <div class="source-icon" style="background:rgba(0,217,126,0.15);">🏭</div>
+        <div class="source-info">
+          <div class="source-name">Émissions Directes</div>
+          <div class="source-range" id="range-emissions">Non configuré</div>
+        </div>
+        <div class="source-status" id="status-emissions"></div>
+      </div>
+      <div class="source-item" data-source="dechets" onclick="configureSource('dechets')">
+        <div class="source-icon" style="background:rgba(124,92,191,0.15);">♻️</div>
+        <div class="source-info">
+          <div class="source-name">Déchets & Recyclage</div>
+          <div class="source-range" id="range-dechets">Non configuré</div>
+        </div>
+        <div class="source-status" id="status-dechets"></div>
+      </div>
+      <div class="source-item" data-source="filiales" onclick="configureSource('filiales')">
+        <div class="source-icon" style="background:rgba(230,57,70,0.15);">🏢</div>
+        <div class="source-info">
+          <div class="source-name">Activités Filiales</div>
+          <div class="source-range" id="range-filiales">Non configuré</div>
+        </div>
+        <div class="source-status" id="status-filiales"></div>
+      </div>
+    </div>
+
+    <!-- Config modale inline -->
+    <div id="source-config" class="card" style="display:none; margin-top:10px;">
+      <div class="section-title" id="config-title">Configurer la source</div>
+      <div class="form-group">
+        <label class="form-label">Feuille Excel</label>
+        <select class="form-control" id="config-sheet">
+          <option value="">Sélectionner une feuille...</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Plage de données (ex: A1:F50)</label>
+        <input type="text" class="form-control" id="config-range" placeholder="A1:F50"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Ligne d'en-tête</label>
+        <input type="number" class="form-control" id="config-header" value="1" min="1"/>
+      </div>
+      <div class="btn-group">
+        <button class="btn btn-primary" onclick="saveSourceConfig()">💾 Enregistrer</button>
+        <button class="btn btn-secondary" onclick="cancelSourceConfig()">Annuler</button>
+        <button class="btn btn-secondary btn-sm" onclick="previewSource()">👁 Aperçu</button>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="section-title">Structuration</div>
+    <div class="card">
+      <div class="form-group">
+        <label class="form-label">Année de référence</label>
+        <input type="number" class="form-control" id="ref-year" value="2024" min="2000" max="2030"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Unité d'activité (production, CA...)</label>
+        <input type="text" class="form-control" id="activity-unit" placeholder="ex: tonnes produites, M€ CA"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Valeur unité d'activité</label>
+        <input type="number" class="form-control" id="activity-value" placeholder="ex: 12500"/>
+      </div>
+    </div>
+
+    <button class="btn btn-primary btn-block" onclick="collectAllData()">
+      📥 Collecter & Structurer les données
+    </button>
+
+    <div class="status-bar" id="collect-status">
+      <div class="status-dot"></div>
+      <span>En attente de configuration</span>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       PANEL 2 — CALCUL BILAN CARBONE
+       ============================================================ -->
+  <section class="panel" id="panel-carbon">
+
+    <div class="section-title">Facteurs d'émission</div>
+    <div class="card">
+      <p class="text-sm text-muted mb-6">Facteurs ADEME 2024 (kgCO₂e/unité) — modifiables</p>
+
+      <table class="scope-table" style="margin-bottom:8px;">
+        <thead>
+          <tr>
+            <th>Source</th>
+            <th>Unité</th>
+            <th>Facteur</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="row-label" style="color:var(--scope1);">🟢 Gaz naturel</td>
+            <td><small class="text-muted">MWh</small></td>
+            <td><input type="number" class="form-control" id="fe-gaz" value="0.205" step="0.001"/></td>
+          </tr>
+          <tr>
+            <td class="row-label" style="color:var(--scope1);">🟢 Fioul lourd</td>
+            <td><small class="text-muted">L</small></td>
+            <td><input type="number" class="form-control" id="fe-fioul" value="2.96" step="0.001"/></td>
+          </tr>
+          <tr>
+            <td class="row-label" style="color:var(--scope1);">🟢 Procédés ch.</td>
+            <td><small class="text-muted">t</small></td>
+            <td><input type="number" class="form-control" id="fe-process" value="1.0" step="0.01"/></td>
+          </tr>
+          <tr>
+            <td class="row-label" style="color:var(--scope2);">🔵 Élec. (RFE)</td>
+            <td><small class="text-muted">MWh</small></td>
+            <td><input type="number" class="form-control" id="fe-elec" value="0.0571" step="0.0001"/></td>
+          </tr>
+          <tr>
+            <td class="row-label" style="color:var(--scope2);">🔵 Chaleur rés.</td>
+            <td><small class="text-muted">MWh</small></td>
+            <td><input type="number" class="form-control" id="fe-chaleur" value="0.059" step="0.001"/></td>
+          </tr>
+          <tr>
+            <td class="row-label" style="color:var(--scope3);">🟣 Transport rout.</td>
+            <td><small class="text-muted">t·km</small></td>
+            <td><input type="number" class="form-control" id="fe-transport" value="0.0621" step="0.0001"/></td>
+          </tr>
+          <tr>
+            <td class="row-label" style="color:var(--scope3);">🟣 Déchets enfouis</td>
+            <td><small class="text-muted">t</small></td>
+            <td><input type="number" class="form-control" id="fe-dechets" value="449" step="1"/></td>
+          </tr>
+          <tr>
+            <td class="row-label" style="color:var(--scope3);">🟣 Achats matières</td>
+            <td><small class="text-muted">t</small></td>
+            <td><input type="number" class="form-control" id="fe-achats" value="1.85" step="0.01"/></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section-title">Saisie manuelle (si pas de feuilles)</div>
+    <div class="card">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" style="color:var(--scope1);">Gaz naturel (MWh)</label>
+          <input type="number" class="form-control" id="qty-gaz" placeholder="0"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label" style="color:var(--scope1);">Fioul (L)</label>
+          <input type="number" class="form-control" id="qty-fioul" placeholder="0"/>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" style="color:var(--scope1);">Émissions proc. (t)</label>
+          <input type="number" class="form-control" id="qty-process" placeholder="0"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label" style="color:var(--scope2);">Électricité (MWh)</label>
+          <input type="number" class="form-control" id="qty-elec" placeholder="0"/>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" style="color:var(--scope2);">Chaleur réseau (MWh)</label>
+          <input type="number" class="form-control" id="qty-chaleur" placeholder="0"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label" style="color:var(--scope3);">Transport (t·km)</label>
+          <input type="number" class="form-control" id="qty-transport" placeholder="0"/>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" style="color:var(--scope3);">Déchets enfouis (t)</label>
+          <input type="number" class="form-control" id="qty-dechets" placeholder="0"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label" style="color:var(--scope3);">Achats matières (t)</label>
+          <input type="number" class="form-control" id="qty-achats" placeholder="0"/>
+        </div>
+      </div>
+    </div>
+
+    <button class="btn btn-primary btn-block" onclick="calculateCarbon()">
+      🧮 Calculer le bilan carbone
+    </button>
+
+    <!-- Résultats -->
+    <div id="carbon-results" style="display:none; margin-top:12px;">
+      <div class="section-title">Résultats</div>
+      <div class="scope-badges">
+        <div class="scope-badge s1">
+          <div class="label">Scope 1</div>
+          <div class="value" id="res-s1">—</div>
+          <div class="unit">tCO₂e</div>
+        </div>
+        <div class="scope-badge s2">
+          <div class="label">Scope 2</div>
+          <div class="value" id="res-s2">—</div>
+          <div class="unit">tCO₂e</div>
+        </div>
+        <div class="scope-badge s3">
+          <div class="label">Scope 3</div>
+          <div class="value" id="res-s3">—</div>
+          <div class="unit">tCO₂e</div>
+        </div>
+      </div>
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-label">Total CO₂e</div>
+          <div class="kpi-value text-accent" id="res-total">—</div>
+          <div class="kpi-delta" id="res-delta"></div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Intensité carbone</div>
+          <div class="kpi-value" id="res-intensity">—</div>
+          <div class="kpi-delta text-muted" id="res-intensity-unit">tCO₂e/unité</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Part Scope 1</div>
+          <div class="kpi-value" id="res-pct1">—</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Part Scope 3</div>
+          <div class="kpi-value" id="res-pct3">—</div>
+        </div>
+      </div>
+      <button class="btn btn-scope1 btn-block" onclick="exportCarbonToExcel()">
+        📊 Exporter vers Excel
+      </button>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       PANEL 3 — DASHBOARD
+       ============================================================ -->
+  <section class="panel" id="panel-dashboard">
+
+    <div class="section-title">Configuration du dashboard</div>
+    <div class="card">
+      <div class="form-group">
+        <label class="form-label">Nom de la feuille dashboard</label>
+        <input type="text" class="form-control" id="dash-sheet-name" value="ESG_Dashboard"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Graphiques à générer</label>
+        <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:4px;">
+          <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;">
+            <input type="checkbox" id="chart-scopes" checked/> Répartition Scopes
+          </label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;">
+            <input type="checkbox" id="chart-evolution" checked/> Évolution annuelle
+          </label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;">
+            <input type="checkbox" id="chart-sources" checked/> Sources d'émission
+          </label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;">
+            <input type="checkbox" id="chart-intensity"/> Intensité carbone
+          </label>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Données historiques (années)</label>
+        <div id="historical-years">
+          <div class="form-row-3" style="margin-bottom:4px;">
+            <input type="number" class="form-control" placeholder="Année" id="hist-y1" value="2022"/>
+            <input type="number" class="form-control" placeholder="tCO₂e" id="hist-v1" value="1850"/>
+            <button class="btn btn-secondary btn-sm" onclick="addHistoricalYear()">+</button>
+          </div>
+          <div class="form-row" style="margin-bottom:4px;">
+            <input type="number" class="form-control" placeholder="Année" id="hist-y2" value="2023"/>
+            <input type="number" class="form-control" placeholder="tCO₂e" id="hist-v2" value="1720"/>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-title">KPI à afficher</div>
+    <div class="card">
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">
+        <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;">
+          <input type="checkbox" id="kpi-co2" checked/> Émissions totales
+        </label>
+        <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;">
+          <input type="checkbox" id="kpi-intensity" checked/> Intensité carbone
+        </label>
+        <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;">
+          <input type="checkbox" id="kpi-reduction" checked/> % Réduction vs N-1
+        </label>
+        <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;">
+          <input type="checkbox" id="kpi-waste"/> Taux recyclage
+        </label>
+        <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;">
+          <input type="checkbox" id="kpi-energy"/> Consomm. énergie
+        </label>
+      </div>
+    </div>
+
+    <button class="btn btn-primary btn-block" onclick="generateDashboardFromPanel()">
+      📊 Générer le tableau de bord
+    </button>
+    <button class="btn btn-secondary btn-block mt-6" onclick="refreshDashboard()">
+      🔄 Rafraîchir les données
+    </button>
+
+    <div class="status-bar" id="dash-status" style="margin-top:8px;">
+      <div class="status-dot"></div>
+      <span>En attente</span>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       PANEL 4 — ANALYSE IA
+       ============================================================ -->
+  <section class="panel" id="panel-analysis">
+
+    <div class="section-title">Détection d'anomalies</div>
+    <div class="card">
+      <div class="form-group">
+        <label class="form-label">Seuil d'alerte (% écart)</label>
+        <input type="number" class="form-control" id="anomaly-threshold" value="20" min="5" max="100"/>
+      </div>
+      <button class="btn btn-warn btn-block" onclick="detectAnomalies()">
+        🔍 Analyser les anomalies
+      </button>
+    </div>
+
+    <div id="anomalies-container" style="display:none;">
+      <div class="section-title">Anomalies détectées</div>
+      <div class="anomaly-list" id="anomaly-list"></div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="section-title">Recommandations IA</div>
+    <div class="card">
+      <p class="text-sm text-muted mb-6">Pistes de réduction basées sur les données collectées</p>
+      <div class="form-group">
+        <label class="form-label">Objectif de réduction (%)</label>
+        <input type="number" class="form-control" id="reduction-target" value="30" min="5" max="90"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Horizon temporel</label>
+        <select class="form-control" id="reduction-horizon">
+          <option value="1">1 an</option>
+          <option value="3" selected>3 ans</option>
+          <option value="5">5 ans</option>
+          <option value="10">10 ans</option>
+        </select>
+      </div>
+      <button class="btn btn-scope2 btn-block" onclick="generateRecommendations()">
+        💡 Générer les recommandations
+      </button>
+    </div>
+
+    <div id="recos-container" style="display:none; margin-top:10px;">
+      <div class="section-title">Actions prioritaires</div>
+      <div class="reco-list" id="reco-list"></div>
+    </div>
+
+    <div class="divider"></div>
+    <button class="btn btn-secondary btn-block" onclick="exportAnalysisToExcel()">
+      📊 Exporter l'analyse vers Excel
+    </button>
+  </section>
+
+  <!-- ============================================================
+       PANEL 5 — RAPPORT ESG
+       ============================================================ -->
+  <section class="panel" id="panel-report">
+
+    <div class="section-title">Paramètres du rapport</div>
+    <div class="card">
+      <div class="form-group">
+        <label class="form-label">Nom de l'entreprise</label>
+        <input type="text" class="form-control" id="report-company" placeholder="Ex: Industrie France SA"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Secteur d'activité</label>
+        <select class="form-control" id="report-sector">
+          <option value="industrie">Industrie manufacturière</option>
+          <option value="chimie">Chimie / Pharmaceutique</option>
+          <option value="btp">BTP / Construction</option>
+          <option value="agroalimentaire">Agroalimentaire</option>
+          <option value="transport">Transport / Logistique</option>
+          <option value="energie">Énergie</option>
+          <option value="autre">Autre</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Période</label>
+          <input type="number" class="form-control" id="report-year" value="2024"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Responsable ESG</label>
+          <input type="text" class="form-control" id="report-author" placeholder="Nom Prénom"/>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-title">Contenu du rapport</div>
+    <div class="card">
+      <div style="display:flex;flex-direction:column;gap:5px;">
+        <label style="display:flex;align-items:center;gap:6px;font-size:11px;cursor:pointer;">
+          <input type="checkbox" id="rpt-bilan" checked/> Synthèse bilan carbone (Scopes 1/2/3)
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:11px;cursor:pointer;">
+          <input type="checkbox" id="rpt-kpi" checked/> Tableau des indicateurs KPI
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:11px;cursor:pointer;">
+          <input type="checkbox" id="rpt-evolution" checked/> Graphique d'évolution
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:11px;cursor:pointer;">
+          <input type="checkbox" id="rpt-anomalies" checked/> Anomalies & alertes
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:11px;cursor:pointer;">
+          <input type="checkbox" id="rpt-recos" checked/> Plan d'actions & recommandations
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:11px;cursor:pointer;">
+          <input type="checkbox" id="rpt-methodologie"/> Note méthodologique
+        </label>
+      </div>
+    </div>
+
+    <div class="section-title">Format de sortie</div>
+    <div class="format-toggle">
+      <div class="format-btn active" id="fmt-excel" onclick="selectFormat('excel')">📊 Excel</div>
+      <div class="format-btn" id="fmt-word" onclick="selectFormat('word')">📝 Word</div>
+      <div class="format-btn" id="fmt-pdf" onclick="selectFormat('pdf')">📄 PDF</div>
+    </div>
+    <div id="format-note" class="text-sm text-muted" style="margin-bottom:10px;">
+      ℹ️ Excel : rapport intégré dans un nouvel onglet
+    </div>
+
+    <div class="report-preview">
+      <h4>Aperçu du rapport</h4>
+      <ul id="report-preview-list">
+        <li>Synthèse bilan carbone (Scopes 1/2/3)</li>
+        <li>Tableau des indicateurs KPI</li>
+        <li>Graphique d'évolution</li>
+        <li>Anomalies & alertes</li>
+        <li>Plan d'actions & recommandations</li>
+      </ul>
+    </div>
+
+    <button class="btn btn-primary btn-block" onclick="generateReport()">
+      📄 Générer le rapport ESG
+    </button>
+
+    <div class="status-bar" id="report-status" style="margin-top:8px;">
+      <div class="status-dot"></div>
+      <span>Prêt à générer</span>
+    </div>
+  </section>
+
+</main>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<script src="esg-calculator.js"></script>
+<script src="taskpane.js"></script>
+</body>
+</html>
