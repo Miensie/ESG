@@ -36,7 +36,7 @@ esg-addin/
 git init
 git add .
 git commit -m "ESG Analyzer Pro v1.0"
-git remote add origin https://github.com/VOTRE_USER/ESG.git
+git remote add origin https://github.com/miensie/ESG.git
 git push -u origin main
 
 # Activer GitHub Pages → Settings → Pages → Branch: main
