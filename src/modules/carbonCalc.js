@@ -3,66 +3,72 @@
  * MODULE : carbonCalc.js
  * Calcul du bilan carbone selon GHG Protocol / ADEME
  * Scopes 1, 2 et 3
+ *
+ * Sources des facteurs (par priorité) :
+ *  1. AdemeSync   — API ADEME temps réel (si disponible)
+ *  2. CarbonFactors — Base Carbone V23.6 intégrée (150+ facteurs)
  * ============================================================
  */
 
 "use strict";
 
-// ─── Facteurs d'émission (tCO2eq par unité) ──────────────────────────────────
-// Source : Base Carbone ADEME 2024 + GHG Protocol
-const EMISSION_FACTORS = {
+// ─── Résolution des facteurs d'émission ──────────────────────────────────────
+// Utilise AdemeSync si disponible, sinon CarbonFactors directement.
+// Les deux modules sont chargés avant carbonCalc.js dans taskpane.html.
 
-  // ── SCOPE 1 : Émissions directes ─────────────────────────────────────────
+function _getFactorObj(category, type) {
+  // 1. Via AdemeSync (API + cache)
+  if (typeof AdemeSync !== "undefined") {
+    const f = AdemeSync.getFactor(type);
+    if (f) return f;
+  }
+  // 2. Via CarbonFactors (base locale intégrée)
+  if (typeof CarbonFactors !== "undefined") {
+    const f = CarbonFactors.getFactor(type);
+    if (f) return f;
+  }
+  // 3. Fallback sur l'ancienne table inline (rétrocompatibilité)
+  return _LEGACY_FACTORS[category]?.[type] || null;
+}
+
+// ─── Table de fallback (rétrocompatibilité) ───────────────────────────────────
+// Utilisée uniquement si carbonFactors.js n'est pas chargé.
+const _LEGACY_FACTORS = {
   scope1: {
-    // Combustibles (tCO2eq / MWh PCI)
-    naturalGas:     { factor: 0.2041,  unit: "MWh",  label: "Gaz naturel" },
-    fuelOil:        { factor: 0.2773,  unit: "MWh",  label: "Fioul lourd" },
-    diesel:         { factor: 0.2670,  unit: "MWh",  label: "Gazole" },
-    lpg:            { factor: 0.2274,  unit: "MWh",  label: "GPL" },
-    coal:           { factor: 0.3411,  unit: "MWh",  label: "Charbon" },
-    // Procédés industriels (tCO2eq / tonne produit)
-    cementProduction: { factor: 0.820, unit: "t",    label: "Production ciment" },
-    steelProduction:  { factor: 1.850, unit: "t",    label: "Production acier" },
-    // Fluides frigorigènes (tCO2eq / kg)
-    r410a:          { factor: 2.088,   unit: "kg",   label: "R-410A (fuite)" },
-    r32:            { factor: 0.675,   unit: "kg",   label: "R-32 (fuite)" },
-    r404a:          { factor: 3.922,   unit: "kg",   label: "R-404A (fuite)" },
+    naturalGas:     { factor: 0.2041,  unit: "MWh", label: "Gaz naturel" },
+    fuelOil:        { factor: 0.2773,  unit: "MWh", label: "Fioul lourd" },
+    diesel:         { factor: 0.2670,  unit: "MWh", label: "Gazole" },
+    lpg:            { factor: 0.2274,  unit: "MWh", label: "GPL" },
+    coal:           { factor: 0.3411,  unit: "MWh", label: "Charbon" },
+    r410a:          { factor: 2.088,   unit: "kg",  label: "R-410A" },
+    r32:            { factor: 0.675,   unit: "kg",  label: "R-32" },
+    r404a:          { factor: 3.922,   unit: "kg",  label: "R-404A" },
   },
-
-  // ── SCOPE 2 : Énergie achetée ─────────────────────────────────────────────
   scope2: {
-    // Électricité (tCO2eq / MWh) — facteurs par pays
-    electricityFrance:     { factor: 0.0490, unit: "MWh", label: "Électricité France" },
-    electricityEurope:     { factor: 0.2950, unit: "MWh", label: "Électricité Europe moy." },
-    electricityUSA:        { factor: 0.3860, unit: "MWh", label: "Électricité USA" },
-    electricityChina:      { factor: 0.5810, unit: "MWh", label: "Électricité Chine" },
-    electricityWorld:      { factor: 0.4760, unit: "MWh", label: "Électricité monde moy." },
-    // Vapeur / chaleur achetée (tCO2eq / MWh)
-    districtHeat:          { factor: 0.1670, unit: "MWh", label: "Chaleur réseau" },
-    steamPurchased:        { factor: 0.1020, unit: "MWh", label: "Vapeur achetée" },
+    electricityFrance: { factor: 0.0490, unit: "MWh", label: "Électricité France" },
+    electricityEurope: { factor: 0.2950, unit: "MWh", label: "Électricité Europe" },
+    electricityUSA:    { factor: 0.3860, unit: "MWh", label: "Électricité USA" },
+    electricityChina:  { factor: 0.5810, unit: "MWh", label: "Électricité Chine" },
+    electricityWorld:  { factor: 0.4760, unit: "MWh", label: "Électricité monde" },
+    districtHeat:      { factor: 0.1670, unit: "MWh", label: "Chaleur réseau" },
+    steamPurchased:    { factor: 0.1020, unit: "MWh", label: "Vapeur achetée" },
   },
-
-  // ── SCOPE 3 : Émissions indirectes ───────────────────────────────────────
   scope3: {
-    // Transport amont fret (tCO2eq / t.km)
-    roadFreightLight:    { factor: 0.000191, unit: "t.km", label: "Fret routier léger (<3,5t)" },
-    roadFreightHeavy:    { factor: 0.000096, unit: "t.km", label: "Fret routier lourd (>3,5t)" },
+    roadFreightLight:    { factor: 0.000191, unit: "t.km", label: "Fret routier léger" },
+    roadFreightHeavy:    { factor: 0.000096, unit: "t.km", label: "Fret routier lourd" },
     railFreight:         { factor: 0.000028, unit: "t.km", label: "Fret ferroviaire" },
     seaFreight:          { factor: 0.000011, unit: "t.km", label: "Fret maritime" },
     airFreight:          { factor: 0.000602, unit: "t.km", label: "Fret aérien" },
-    // Transport employés (tCO2eq / km.personne)
-    businessCar:         { factor: 0.000193, unit: "km",   label: "Voiture essence (dépl. pro)" },
-    businessCarDiesel:   { factor: 0.000163, unit: "km",   label: "Voiture diesel (dépl. pro)" },
-    businessCarElectric: { factor: 0.000019, unit: "km",   label: "Voiture électrique (dépl. pro)" },
+    businessCar:         { factor: 0.000193, unit: "km",   label: "Voiture essence" },
+    businessCarDiesel:   { factor: 0.000163, unit: "km",   label: "Voiture diesel" },
+    businessCarElectric: { factor: 0.000019, unit: "km",   label: "Voiture électrique" },
     businessAirShort:    { factor: 0.000258, unit: "km",   label: "Avion court-courrier" },
     businessAirLong:     { factor: 0.000195, unit: "km",   label: "Avion long-courrier" },
-    trainTravel:         { factor: 0.000003, unit: "km",   label: "Train (dépl. pro)" },
-    // Déchets (tCO2eq / tonne)
+    trainTravel:         { factor: 0.000003, unit: "km",   label: "Train" },
     wasteIncineration:   { factor: 0.8540,   unit: "t",    label: "Incinération déchets" },
-    wasteLandfill:       { factor: 0.4580,   unit: "t",    label: "Enfouissement déchets" },
+    wasteLandfill:       { factor: 0.4580,   unit: "t",    label: "Enfouissement" },
     wasteRecycling:      { factor: -0.0830,  unit: "t",    label: "Recyclage (évité)" },
     wasteWater:          { factor: 0.7080,   unit: "t",    label: "Traitement eaux usées" },
-    // Achats de biens et services
     steelPurchased:      { factor: 1.850,    unit: "t",    label: "Acier acheté" },
     aluminiumPurchased:  { factor: 8.240,    unit: "t",    label: "Aluminium acheté" },
     plasticPurchased:    { factor: 3.140,    unit: "t",    label: "Plastique acheté" },
@@ -74,28 +80,38 @@ const EMISSION_FACTORS = {
 // ─── Calculateur principal ────────────────────────────────────────────────────
 
 /**
- * Calcule les émissions pour une activité donnée
+ * Calcule les émissions pour une activité donnée.
  * @param {string} category  - "scope1" | "scope2" | "scope3"
  * @param {string} type      - clé du facteur (ex: "naturalGas")
  * @param {number} quantity  - quantité dans l'unité du facteur
- * @returns {{ tCO2eq: number, label: string, unit: string, factor: number }}
+ * @returns {{ tCO2eq, label, unit, factor, quantity, source }}
  */
 function calcEmission(category, type, quantity) {
-  const scopeFactors = EMISSION_FACTORS[category];
-  if (!scopeFactors) throw new Error(`Catégorie inconnue : ${category}`);
-  const ef = scopeFactors[type];
-  if (!ef) throw new Error(`Type inconnu : ${type} dans ${category}`);
+  const ef = _getFactorObj(category, type);
+  if (!ef) throw new Error(`Facteur inconnu : "${type}" (scope: ${category})`);
 
   return {
-    tCO2eq: parseFloat((ef.factor * quantity).toFixed(4)),
-    label:  ef.label,
-    unit:   ef.unit,
-    factor: ef.factor,
-    quantity
+    tCO2eq:   parseFloat((ef.factor * quantity).toFixed(4)),
+    label:    ef.label,
+    unit:     ef.unit,
+    factor:   ef.factor,
+    quantity,
+    source:   ef.source || "ADEME_V23.6",
   };
 }
 
 /**
+ * Retourne les facteurs disponibles pour un scope,
+ * en fusionnant base locale + surcharges API.
+ */
+function getAvailableFactors(scope) {
+  if (typeof AdemeSync !== "undefined") return AdemeSync.getFactorsByScope(scope);
+  if (typeof CarbonFactors !== "undefined") return CarbonFactors.getFactorsByScope(scope);
+  return _LEGACY_FACTORS[scope] || {};
+}
+
+/**
+
  * Calcule le bilan carbone complet depuis un objet de données structuré
  * @param {Object} data - Données ESG collectées depuis Excel
  * @returns {BilanCarbone}
