@@ -10,7 +10,7 @@
   <style>
     /* ══ Onboarding overlay ══════════════════════════════════════════════════ */
     .onboarding-overlay {
-      position:fixed; inset:0; background:var(--esg-dark); z-index:1000;
+      position:fixed; inset:0; background:#0D3B2E; z-index:1000;
       display:flex; flex-direction:column; align-items:center; justify-content:center;
       padding:24px; overflow-y:auto;
     }
@@ -474,5 +474,96 @@
 <script src="src/modules/reportGenerator.js"></script>
 <script src="src/modules/geminiAI.js"></script>
 <script src="src/app.js"></script>
+
+<!-- ══ Script onboarding autonome ══════════════════════════════════════════
+     S'exécute immédiatement, sans attendre Office.onReady().
+     Gère le bouton "Connecter" dès que le DOM est prêt.
+     ════════════════════════════════════════════════════════════════════════ -->
+<script>
+(function () {
+  // Attendre que le DOM + geminiAI.js soient disponibles
+  document.addEventListener("DOMContentLoaded", function () {
+
+    // ── Vérifier si une clé est déjà sauvegardée ────────────────────────
+    // (geminiAI.js est chargé avant ce script, donc GeminiAI est disponible)
+    if (typeof GeminiAI !== "undefined" && GeminiAI.loadSavedKey()) {
+      // Clé existante → cacher l'onboarding, montrer l'app
+      document.getElementById("onboarding-overlay").classList.add("hidden");
+      document.getElementById("app-shell").style.display = "";
+      var masked = GeminiAI.getMaskedKey();
+      if (masked) {
+        var el = document.getElementById("api-key-display");
+        if (el) el.textContent = masked;
+      }
+    }
+    // Sinon l'onboarding reste visible (il est visible par défaut dans le HTML)
+
+    // ── Bouton Connecter ────────────────────────────────────────────────
+    var btn   = document.getElementById("onb-btn-connect");
+    var input = document.getElementById("onb-key-input");
+
+    function doConnect() {
+      var key = input.value.trim();
+      var status = document.getElementById("onb-status");
+      var btnText = document.getElementById("onb-btn-text");
+
+      if (!key) {
+        status.textContent = "Collez votre clé API (commence par AIza…)";
+        status.className = "onb-status error";
+        return;
+      }
+
+      btn.disabled = true;
+      btnText.innerHTML = '<span class="spinner"></span> Test de connexion…';
+      status.textContent = "Connexion à Google AI Studio…";
+      status.className = "onb-status info";
+
+      GeminiAI.testConnection(key).then(function () {
+        GeminiAI.saveKey(key);
+        status.textContent = "✅ Connexion réussie ! Bienvenue dans ESG Analyzer Pro.";
+        status.className = "onb-status ok";
+
+        setTimeout(function () {
+          document.getElementById("onboarding-overlay").classList.add("hidden");
+          document.getElementById("app-shell").style.display = "";
+          var masked = GeminiAI.getMaskedKey();
+          if (masked) {
+            var el = document.getElementById("api-key-display");
+            if (el) el.textContent = masked;
+          }
+        }, 900);
+
+      }).catch(function (e) {
+        status.textContent = "❌ " + e.message;
+        status.className = "onb-status error";
+        btn.disabled = false;
+        btnText.textContent = "✓ Connecter et tester";
+      });
+    }
+
+    if (btn)   btn.addEventListener("click", doConnect);
+    if (input) input.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") doConnect();
+    });
+
+    // ── Bouton "Changer la clé" ─────────────────────────────────────────
+    var btnChange = document.getElementById("btn-change-key");
+    if (btnChange) {
+      btnChange.addEventListener("click", function () {
+        if (typeof GeminiAI !== "undefined") GeminiAI.clearKey();
+        document.getElementById("onboarding-overlay").classList.remove("hidden");
+        document.getElementById("app-shell").style.display = "none";
+        input.value = "";
+        var s = document.getElementById("onb-status");
+        s.textContent = "Entrez votre nouvelle clé API.";
+        s.className = "onb-status info";
+        var bt = document.getElementById("onb-btn-text");
+        if (bt) bt.textContent = "✓ Connecter et tester";
+        btn.disabled = false;
+      });
+    }
+  });
+})();
+</script>
 </body>
 </html>
