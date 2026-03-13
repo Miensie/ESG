@@ -15,7 +15,7 @@
 "use strict";
 
 const GEMINI_CONFIG = {
-  model:     "gemini-2.0-flash",
+  model:     "gemini-2.5-flash-lite",
   apiBase:   "https://generativelanguage.googleapis.com/v1beta/models",
   maxTokens: 2048,
   storageKey: "esg_gemini_api_key",   // clé localStorage
