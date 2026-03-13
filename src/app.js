@@ -34,18 +34,6 @@ async function initApp() {
     document.getElementById("workbook-name").textContent = name;
   } catch { document.getElementById("workbook-name").textContent = "Excel connecté"; }
 
-  // ── Onboarding BYOK ──────────────────────────────────────────────────────
-  const hasSaved = GeminiAI.loadSavedKey();
-  if (hasSaved) { showApp(); } else { showOnboarding(); }
-
-  document.getElementById("onb-btn-connect").addEventListener("click", handleOnboardingConnect);
-  document.getElementById("onb-key-input").addEventListener("keydown", (e) => {
-    if (e.key === "Enter") handleOnboardingConnect();
-  });
-  document.getElementById("btn-change-key").addEventListener("click", () => {
-    GeminiAI.clearKey(); showOnboarding();
-  });
-
   // ── Handlers principaux ───────────────────────────────────────────────────
   document.getElementById("btn-init").addEventListener("click", handleInit);
   document.getElementById("btn-demo").addEventListener("click", handleDemo);
@@ -71,54 +59,6 @@ async function initApp() {
   document.getElementById("btn-download-report").addEventListener("click", () => handleReport("download"));
 
   setStatus("ESG Analyzer Pro v2.0 prêt ✓");
-}
-
-// ── Onboarding ────────────────────────────────────────────────────────────────
-
-function showOnboarding() {
-  document.getElementById("onboarding-overlay").classList.remove("hidden");
-  document.getElementById("app-shell").style.display = "none";
-  document.getElementById("onb-key-input").value = "";
-  const s = document.getElementById("onb-status");
-  s.textContent = "Entrez votre clé API pour commencer.";
-  s.className = "onb-status info";
-}
-
-function showApp() {
-  document.getElementById("onboarding-overlay").classList.add("hidden");
-  document.getElementById("app-shell").style.display = "";
-  const masked = GeminiAI.getMaskedKey();
-  if (masked) document.getElementById("api-key-display").textContent = masked;
-}
-
-async function handleOnboardingConnect() {
-  const input  = document.getElementById("onb-key-input");
-  const btn    = document.getElementById("onb-btn-connect");
-  const status = document.getElementById("onb-status");
-  const key    = input.value.trim();
-
-  if (!key) {
-    status.textContent = "Collez votre clé API (commence par AIza…)";
-    status.className = "onb-status error"; return;
-  }
-
-  btn.disabled = true;
-  document.getElementById("onb-btn-text").innerHTML = `<span class="spinner"></span> Test de connexion…`;
-  status.textContent = "Connexion à Google AI Studio…";
-  status.className = "onb-status info";
-
-  try {
-    await GeminiAI.testConnection(key);
-    GeminiAI.saveKey(key);
-    status.textContent = "✅ Connexion réussie !";
-    status.className = "onb-status ok";
-    setTimeout(() => showApp(), 800);
-  } catch (e) {
-    status.textContent = `❌ ${e.message}`;
-    status.className = "onb-status error";
-    btn.disabled = false;
-    document.getElementById("onb-btn-text").textContent = "✓ Connecter et tester";
-  }
 }
 
 function setupNavigation() {
