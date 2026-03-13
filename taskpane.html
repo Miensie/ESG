@@ -1,195 +1,281 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
   <title>ESG Analyzer Pro</title>
-
-  <!-- Office.js — chargement OBLIGATOIRE en premier -->
   <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js" type="text/javascript"></script>
-
-  <!-- Chart.js pour graphiques inline -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="src/styles/main.css"/>
+  <style>
+    /* ══ Onboarding overlay ══════════════════════════════════════════════════ */
+    .onboarding-overlay {
+      position:fixed; inset:0; background:var(--esg-dark); z-index:1000;
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      padding:24px; overflow-y:auto;
+    }
+    .onboarding-overlay.hidden { display:none; }
 
-  <!-- Styles -->
-  <link rel="stylesheet" href="src/styles/main.css" />
+    .onb-logo { font-size:40px; margin-bottom:12px; }
+    .onb-title { font-size:18px; font-weight:700; color:var(--esg-mint); margin-bottom:4px; text-align:center; }
+    .onb-sub   { font-size:11px; color:var(--esg-mist); margin-bottom:24px; text-align:center; }
+
+    .onb-steps { width:100%; max-width:320px; margin-bottom:20px; }
+    .onb-step  { display:flex; gap:10px; align-items:flex-start; margin-bottom:14px; }
+    .onb-step-num {
+      width:22px; height:22px; border-radius:50%; background:var(--esg-emerald);
+      color:#fff; font-size:11px; font-weight:700; display:flex; align-items:center;
+      justify-content:center; flex-shrink:0; margin-top:1px;
+    }
+    .onb-step-text { font-size:11px; color:var(--esg-mist); line-height:1.5; }
+    .onb-step-text strong { color:var(--esg-white); }
+    .onb-step-text a { color:var(--esg-mint); text-decoration:none; font-weight:600; }
+    .onb-step-text a:hover { text-decoration:underline; }
+
+    .onb-form { width:100%; max-width:320px; }
+    .onb-input-row { display:flex; gap:8px; margin-bottom:10px; }
+    .onb-input {
+      flex:1; padding:10px 12px; background:var(--esg-steel);
+      border:1px solid rgba(255,255,255,0.12); border-radius:8px;
+      color:var(--esg-white); font-family:var(--font-ui); font-size:12px; outline:none;
+    }
+    .onb-input:focus { border-color:var(--esg-mint); }
+    .onb-input::placeholder { color:var(--esg-mist); }
+
+    .onb-btn {
+      width:100%; padding:12px; background:var(--esg-emerald); border:none;
+      border-radius:8px; color:#fff; font-family:var(--font-ui); font-size:13px;
+      font-weight:700; cursor:pointer; transition:all 0.2s var(--ease);
+      display:flex; align-items:center; justify-content:center; gap:8px;
+    }
+    .onb-btn:hover  { background:var(--esg-mint); transform:translateY(-1px); }
+    .onb-btn:disabled { opacity:0.5; cursor:not-allowed; transform:none; }
+
+    .onb-status { font-size:11px; text-align:center; margin-top:10px; min-height:18px; }
+    .onb-status.ok    { color:var(--esg-mint); }
+    .onb-status.error { color:var(--esg-danger); }
+    .onb-status.info  { color:var(--esg-mist); }
+
+    .onb-byok-note {
+      margin-top:20px; padding:10px 14px; background:rgba(46,204,142,0.07);
+      border:1px solid rgba(46,204,142,0.15); border-radius:8px;
+      font-size:10px; color:var(--esg-mist); text-align:center;
+      max-width:320px; line-height:1.6;
+    }
+    .onb-byok-note strong { color:var(--esg-mint); }
+
+    /* ══ Panneau Analyse IA — section clé connectée ══════════════════════════ */
+    .api-connected-bar {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:8px 12px; background:rgba(46,204,142,0.08);
+      border:1px solid rgba(46,204,142,0.2); border-radius:8px;
+      margin-bottom:var(--gap-sm);
+    }
+    .api-connected-bar .key-info { font-size:11px; }
+    .api-connected-bar .key-info strong { color:var(--esg-mint); font-family:var(--font-data); }
+    .api-connected-bar .key-info span   { color:var(--esg-mist); font-size:10px; }
+    .btn-change-key {
+      background:none; border:1px solid rgba(255,255,255,0.1); border-radius:6px;
+      color:var(--esg-mist); font-size:10px; font-family:var(--font-ui);
+      padding:4px 8px; cursor:pointer; transition:all 0.2s;
+    }
+    .btn-change-key:hover { border-color:var(--esg-danger); color:var(--esg-danger); }
+
+    /* ══ Chat ════════════════════════════════════════════════════════════════ */
+    .chat-container   { display:flex; flex-direction:column; height:340px; }
+    .chat-messages    { flex:1; overflow-y:auto; padding:var(--gap-sm); display:flex;
+                        flex-direction:column; gap:8px; scrollbar-width:thin;
+                        scrollbar-color:var(--esg-steel) transparent; }
+    .chat-msg         { display:flex; }
+    .chat-msg--user      { justify-content:flex-end; }
+    .chat-msg--assistant { justify-content:flex-start; }
+    .chat-msg--error     { justify-content:flex-start; }
+    .chat-bubble {
+      max-width:88%; padding:8px 12px; border-radius:10px;
+      font-size:11px; line-height:1.55; border:1px solid rgba(255,255,255,0.07);
+    }
+    .chat-msg--user      .chat-bubble { background:var(--esg-emerald); color:#fff; border-radius:10px 10px 2px 10px; }
+    .chat-msg--assistant .chat-bubble { background:var(--esg-steel); color:var(--esg-white); border-radius:10px 10px 10px 2px; }
+
+    .chat-suggestions { display:flex; flex-wrap:wrap; gap:4px; padding:6px var(--gap-sm) 0; }
+    .chat-suggestion {
+      background:rgba(46,204,142,0.1); border:1px solid rgba(46,204,142,0.2);
+      color:var(--esg-mint); border-radius:12px; padding:3px 8px;
+      font-size:9px; font-weight:600; cursor:pointer; white-space:nowrap;
+      transition:all 0.2s var(--ease);
+    }
+    .chat-suggestion:hover { background:rgba(46,204,142,0.2); }
+
+    .chat-input-row {
+      display:flex; gap:6px; padding:var(--gap-sm);
+      border-top:1px solid rgba(255,255,255,0.07); flex-shrink:0;
+    }
+    .chat-input-row textarea {
+      flex:1; resize:none; height:36px; padding:8px 10px;
+      background:var(--esg-forest); border:1px solid rgba(255,255,255,0.12);
+      border-radius:6px; color:var(--esg-white); font-family:var(--font-ui);
+      font-size:12px; outline:none;
+    }
+    .chat-input-row textarea:focus { border-color:var(--esg-mint); }
+    .chat-input-row .btn { width:auto; margin-bottom:0; padding:8px 12px; min-width:44px; }
+    .chat-footer {
+      display:flex; justify-content:space-between; padding:4px var(--gap-sm);
+      font-family:var(--font-data); font-size:9px; color:var(--esg-mist); flex-shrink:0;
+    }
+
+    /* ══ Historique form ══════════════════════════════════════════════════════ */
+    .hist-form { display:grid; grid-template-columns:1fr 1fr; gap:var(--gap-sm); margin-bottom:var(--gap-sm); }
+    .hist-form .form-group { margin-bottom:0; }
+    .hist-form .form-group.full { grid-column:1/-1; }
+  </style>
 </head>
 <body>
 
-<div class="app-shell">
+<!-- ══════════════════════════════════════════════════════════════════════════
+     ÉCRAN ONBOARDING — s'affiche uniquement au premier lancement
+     ══════════════════════════════════════════════════════════════════════════ -->
+<div class="onboarding-overlay" id="onboarding-overlay">
+  <div class="onb-logo">🌿</div>
+  <div class="onb-title">ESG Analyzer Pro</div>
+  <div class="onb-sub">Connectez votre compte Google AI Studio pour activer l'IA</div>
 
-  <!-- ─── HEADER ─────────────────────────────────────────────── -->
+  <div class="onb-steps">
+    <div class="onb-step">
+      <div class="onb-step-num">1</div>
+      <div class="onb-step-text">
+        Rendez-vous sur <a href="https://aistudio.google.com" target="_blank">aistudio.google.com</a>
+        et connectez-vous avec votre compte Google.
+      </div>
+    </div>
+    <div class="onb-step">
+      <div class="onb-step-num">2</div>
+      <div class="onb-step-text">
+        Cliquez sur <strong>Get API Key</strong> → <strong>Create API Key</strong>.
+        Copiez la clé générée (commence par <strong>AIza…</strong>).
+      </div>
+    </div>
+    <div class="onb-step">
+      <div class="onb-step-num">3</div>
+      <div class="onb-step-text">
+        Collez votre clé ci-dessous et cliquez <strong>Connecter</strong>.
+        La connexion sera testée automatiquement.
+      </div>
+    </div>
+  </div>
+
+  <div class="onb-form">
+    <div class="onb-input-row">
+      <input class="onb-input" id="onb-key-input" type="password"
+             placeholder="AIzaSy…" autocomplete="off" spellcheck="false"/>
+    </div>
+    <button class="onb-btn" id="onb-btn-connect">
+      <span id="onb-btn-text">✓ Connecter et tester</span>
+    </button>
+    <div class="onb-status info" id="onb-status">Entrez votre clé API pour commencer.</div>
+  </div>
+
+  <div class="onb-byok-note">
+    <strong>🔒 Vos données restent chez vous</strong><br>
+    Votre clé est sauvegardée localement sur votre poste. Elle n'est jamais envoyée à nos serveurs —
+    uniquement à l'API Google Gemini pour traiter vos bilans carbone.
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     APPLICATION PRINCIPALE
+     ══════════════════════════════════════════════════════════════════════════ -->
+<div class="app-shell" id="app-shell">
+
   <header class="app-header">
     <div class="app-logo">🌿</div>
     <div class="app-title">
       <h1>ESG Analyzer Pro</h1>
       <span id="workbook-name">Chargement…</span>
     </div>
-    <div class="status-dot" id="status-dot" title="Connecté à Excel"></div>
+    <div class="status-dot" title="Connecté à Excel"></div>
   </header>
 
-  <!-- ─── NAVIGATION ──────────────────────────────────────────── -->
-  <nav class="nav-tabs" role="tablist">
-    <button class="nav-tab active" data-panel="panel-accueil"    role="tab">
-      <span class="tab-icon">🏠</span>Accueil
-    </button>
-    <button class="nav-tab" data-panel="panel-collecte"  role="tab">
-      <span class="tab-icon">📥</span>Collecte
-    </button>
-    <button class="nav-tab" data-panel="panel-bilan"     role="tab">
-      <span class="tab-icon">♻️</span>Bilan
-    </button>
-    <button class="nav-tab" data-panel="panel-dashboard" role="tab">
-      <span class="tab-icon">📊</span>Dashboard
-    </button>
-    <button class="nav-tab" data-panel="panel-analyse"   role="tab">
-      <span class="tab-icon">🔍</span>Analyse
-    </button>
-    <button class="nav-tab" data-panel="panel-rapport"   role="tab">
-      <span class="tab-icon">📄</span>Rapport
-    </button>
+  <nav class="nav-tabs">
+    <button class="nav-tab active" data-panel="panel-accueil">  <span class="tab-icon">🏠</span>Accueil</button>
+    <button class="nav-tab"        data-panel="panel-collecte"> <span class="tab-icon">📥</span>Collecte</button>
+    <button class="nav-tab"        data-panel="panel-bilan">    <span class="tab-icon">♻️</span>Bilan</button>
+    <button class="nav-tab"        data-panel="panel-dashboard"><span class="tab-icon">📊</span>Dashboard</button>
+    <button class="nav-tab"        data-panel="panel-analyse">  <span class="tab-icon">✨</span>IA</button>
+    <button class="nav-tab"        data-panel="panel-chat">     <span class="tab-icon">💬</span>Chat IA</button>
+    <button class="nav-tab"        data-panel="panel-rapport">  <span class="tab-icon">📄</span>Rapport</button>
   </nav>
 
-  <!-- ─── CONTENU ─────────────────────────────────────────────── -->
   <main class="content-area">
 
-    <!-- ══════════════════════════════════════════════════════════
-         PANEL ACCUEIL
-         ══════════════════════════════════════════════════════════ -->
+    <!-- ══ ACCUEIL ══════════════════════════════════════════════════════════ -->
     <section id="panel-accueil" class="panel active">
-
       <div class="card" style="background:linear-gradient(135deg,var(--esg-emerald),var(--esg-slate));border:none">
-        <div style="font-size:28px;margin-bottom:8px">🌍</div>
-        <div style="font-size:16px;font-weight:700;color:var(--esg-mint);margin-bottom:4px">ESG Analyzer Pro</div>
-        <div style="font-size:11px;color:var(--esg-mist)">Bilan carbone Scope 1/2/3 · GHG Protocol / ADEME</div>
+        <div style="font-size:26px;margin-bottom:6px">🌍</div>
+        <div style="font-size:15px;font-weight:700;color:var(--esg-mint);margin-bottom:4px">ESG Analyzer Pro v2</div>
+        <div style="font-size:10px;color:var(--esg-mist)">Bilan GHG Protocol · Analyse Gemini AI · Chat interactif</div>
       </div>
 
-      <div class="section-title">Configuration</div>
-
+      <div class="section-title">Configuration entreprise</div>
       <div class="form-group">
         <label class="form-label">Entreprise</label>
-        <input class="form-input" id="cfg-entreprise" type="text" placeholder="Mon Entreprise SAS" />
+        <input class="form-input" id="cfg-entreprise" type="text" placeholder="Mon Entreprise SAS"/>
       </div>
       <div class="form-group">
         <label class="form-label">Année de référence</label>
-        <input class="form-input" id="cfg-annee" type="number" value="2024" min="2010" max="2030" />
+        <input class="form-input" id="cfg-annee" type="number" value="2024" min="2010" max="2030"/>
       </div>
       <div class="form-group">
         <label class="form-label">Secteur d'activité</label>
         <select class="form-select" id="cfg-secteur">
           <option>Industrie manufacturière</option>
-          <option>Construction & BTP</option>
-          <option>Transport & Logistique</option>
+          <option>Construction &amp; BTP</option>
+          <option>Transport &amp; Logistique</option>
           <option>Agroalimentaire</option>
-          <option>Chimie & Matériaux</option>
-          <option>Énergie & Utilities</option>
+          <option>Chimie &amp; Matériaux</option>
+          <option>Énergie &amp; Utilities</option>
           <option>Services</option>
           <option>Autre</option>
         </select>
       </div>
       <div class="form-group">
         <label class="form-label">Chiffre d'affaires (€)</label>
-        <input class="form-input" id="cfg-ca" type="number" placeholder="45000000" />
+        <input class="form-input" id="cfg-ca" type="number" placeholder="45000000"/>
       </div>
-
-      <button class="btn btn-primary" id="btn-init">
-        🚀 Initialiser le classeur ESG
-      </button>
-      <button class="btn btn-secondary" id="btn-demo">
-        🎯 Charger données démo
-      </button>
-
-      <div class="section-title" style="margin-top:var(--gap-md)">Étapes du workflow</div>
-      <div class="card">
-        <div style="display:flex;flex-direction:column;gap:var(--gap-sm)">
-          <div style="display:flex;align-items:center;gap:var(--gap-sm);font-size:12px">
-            <span style="background:var(--esg-mint);color:var(--esg-forest);width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0">1</span>
-            Initialiser le classeur → feuilles créées automatiquement
-          </div>
-          <div style="display:flex;align-items:center;gap:var(--gap-sm);font-size:12px">
-            <span style="background:var(--esg-mint);color:var(--esg-forest);width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0">2</span>
-            Remplir les feuilles de collecte (Énergie, Transport, Déchets)
-          </div>
-          <div style="display:flex;align-items:center;gap:var(--gap-sm);font-size:12px">
-            <span style="background:var(--esg-mint);color:var(--esg-forest);width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0">3</span>
-            Calculer le bilan carbone (onglet Bilan)
-          </div>
-          <div style="display:flex;align-items:center;gap:var(--gap-sm);font-size:12px">
-            <span style="background:var(--esg-mint);color:var(--esg-forest);width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0">4</span>
-            Générer le dashboard et le rapport ESG
-          </div>
-        </div>
-      </div>
+      <button class="btn btn-primary"   id="btn-init">🚀 Initialiser le classeur ESG</button>
+      <button class="btn btn-secondary" id="btn-demo">🎯 Charger données démo</button>
     </section>
 
-    <!-- ══════════════════════════════════════════════════════════
-         PANEL COLLECTE
-         ══════════════════════════════════════════════════════════ -->
+    <!-- ══ COLLECTE ═════════════════════════════════════════════════════════ -->
     <section id="panel-collecte" class="panel">
-      <div class="section-title">Sources de données</div>
-
+      <div class="section-title">Feuilles de collecte</div>
       <div class="card">
-        <div class="card-title">📂 Navigation feuilles</div>
-        <p style="font-size:11px;color:var(--esg-mist);margin-bottom:var(--gap-md)">
-          Naviguez directement vers les feuilles de collecte pour saisir vos données.
-        </p>
-        <button class="btn btn-secondary btn-sm" onclick="ExcelBridge.activateSheet('ESG_Energie')">
-          ⚡ Énergie & Combustibles
-        </button>
-        <button class="btn btn-secondary btn-sm" onclick="ExcelBridge.activateSheet('ESG_Transport')">
-          🚛 Transport & Logistique
-        </button>
-        <button class="btn btn-secondary btn-sm" onclick="ExcelBridge.activateSheet('ESG_Dechets')">
-          🗑️ Déchets & Recyclage
-        </button>
-        <button class="btn btn-secondary btn-sm" onclick="ExcelBridge.activateSheet('ESG_Config')">
-          ⚙️ Configuration
-        </button>
+        <div class="card-title">📂 Navigation rapide</div>
+        <button class="btn btn-secondary btn-sm" onclick="ExcelBridge.activateSheet('ESG_Energie')">⚡ Énergie</button>
+        <button class="btn btn-secondary btn-sm" onclick="ExcelBridge.activateSheet('ESG_Transport')">🚛 Transport</button>
+        <button class="btn btn-secondary btn-sm" onclick="ExcelBridge.activateSheet('ESG_Dechets')">🗑️ Déchets</button>
+        <button class="btn btn-secondary btn-sm" onclick="ExcelBridge.activateSheet('ESG_Config')">⚙️ Config</button>
       </div>
-
       <div class="card">
-        <div class="card-title">🔑 Clés de types disponibles</div>
-        <p style="font-size:11px;color:var(--esg-mist);margin-bottom:var(--gap-sm)">
-          Utilisez ces identifiants dans la colonne "Type clé" des feuilles :
-        </p>
+        <div class="card-title">🔑 Clés d'émission disponibles</div>
         <div style="max-height:200px;overflow-y:auto">
           <div class="section-title">Scope 1</div>
-          <table class="data-table">
-            <thead><tr><th>Clé</th><th>Label</th><th>Unité</th></tr></thead>
-            <tbody id="keys-scope1"></tbody>
-          </table>
+          <table class="data-table"><thead><tr><th>Clé</th><th>Label</th><th>Unité</th></tr></thead><tbody id="keys-scope1"></tbody></table>
           <div class="section-title">Scope 2</div>
-          <table class="data-table">
-            <thead><tr><th>Clé</th><th>Label</th><th>Unité</th></tr></thead>
-            <tbody id="keys-scope2"></tbody>
-          </table>
+          <table class="data-table"><thead><tr><th>Clé</th><th>Label</th><th>Unité</th></tr></thead><tbody id="keys-scope2"></tbody></table>
           <div class="section-title">Scope 3</div>
-          <table class="data-table">
-            <thead><tr><th>Clé</th><th>Label</th><th>Unité</th></tr></thead>
-            <tbody id="keys-scope3"></tbody>
-          </table>
+          <table class="data-table"><thead><tr><th>Clé</th><th>Label</th><th>Unité</th></tr></thead><tbody id="keys-scope3"></tbody></table>
         </div>
       </div>
-
       <div class="card">
-        <div class="card-title">📋 Log collecte</div>
-        <div class="log-area" id="log-collecte">
-          <div class="log-entry info"><span class="log-ts">—</span>En attente de données…</div>
-        </div>
+        <div class="card-title">📋 Journal</div>
+        <div class="log-area" id="log-collecte"><div class="log-entry info"><span class="log-ts">—</span>En attente…</div></div>
       </div>
-
-      <button class="btn btn-primary" id="btn-read-data">
-        📖 Lire les données depuis Excel
-      </button>
+      <button class="btn btn-primary" id="btn-read-data">📖 Lire les données depuis Excel</button>
     </section>
 
-    <!-- ══════════════════════════════════════════════════════════
-         PANEL BILAN CARBONE
-         ══════════════════════════════════════════════════════════ -->
+    <!-- ══ BILAN ═════════════════════════════════════════════════════════════ -->
     <section id="panel-bilan" class="panel">
-      <div class="section-title">Calcul du bilan carbone</div>
-
-      <!-- KPI Scopes -->
+      <div class="section-title">Résultats du bilan carbone</div>
       <div class="kpi-grid">
         <div class="kpi-card scope1">
           <div class="kpi-label">Scope 1</div>
@@ -215,8 +301,6 @@
           <div class="kpi-unit">tCO2eq</div>
         </div>
       </div>
-
-      <!-- Intensité carbone -->
       <div class="card">
         <div class="card-title">📐 Intensité carbone</div>
         <div style="display:flex;justify-content:space-between;align-items:center">
@@ -224,143 +308,171 @@
           <span style="font-family:var(--font-data);font-size:20px;color:var(--esg-mint)" id="kpi-intensite">—</span>
         </div>
       </div>
-
-      <!-- Graphique camembert inline -->
       <div class="card">
         <div class="card-title">🥧 Répartition Scopes</div>
-        <div class="chart-wrapper">
-          <canvas id="chart-scopes"></canvas>
-        </div>
+        <div class="chart-wrapper"><canvas id="chart-scopes"></canvas></div>
       </div>
-
-      <!-- Tableau détail -->
       <div class="card">
-        <div class="card-title">📋 Détail des émissions</div>
-        <div style="overflow-x:auto;max-height:220px;overflow-y:auto">
+        <div class="card-title">📋 Détail par source</div>
+        <div style="overflow-x:auto;max-height:200px;overflow-y:auto">
           <table class="data-table">
-            <thead>
-              <tr><th>Source</th><th>Scope</th><th>tCO2eq</th></tr>
-            </thead>
+            <thead><tr><th>Source</th><th>Scope</th><th>tCO2eq</th></tr></thead>
             <tbody id="table-bilan"></tbody>
           </table>
         </div>
       </div>
-
-      <button class="btn btn-primary" id="btn-calc">
-        ♻️ Calculer le bilan carbone
-      </button>
-      <button class="btn btn-secondary" id="btn-write-results">
-        💾 Écrire dans Excel
-      </button>
+      <button class="btn btn-primary"   id="btn-calc">♻️ Calculer le bilan carbone</button>
+      <button class="btn btn-secondary" id="btn-write-results">💾 Écrire dans Excel</button>
     </section>
 
-    <!-- ══════════════════════════════════════════════════════════
-         PANEL DASHBOARD
-         ══════════════════════════════════════════════════════════ -->
+    <!-- ══ DASHBOARD ═════════════════════════════════════════════════════════ -->
     <section id="panel-dashboard" class="panel">
-      <div class="section-title">Tableau de bord visuel</div>
+      <div class="section-title">Graphiques &amp; évolution</div>
 
-      <!-- Graphique barres par source -->
       <div class="card">
-        <div class="card-title">📊 Émissions par source</div>
-        <div class="chart-wrapper" style="height:200px">
-          <canvas id="chart-sources"></canvas>
-        </div>
+        <div class="card-title">📊 Émissions par source (top 12)</div>
+        <div class="chart-wrapper" style="height:200px"><canvas id="chart-sources"></canvas></div>
       </div>
 
-      <!-- Évolution (simulée) -->
       <div class="card">
-        <div class="card-title">📈 Évolution des émissions</div>
-        <div class="chart-wrapper">
-          <canvas id="chart-evolution"></canvas>
-        </div>
+        <div class="card-title">📈 Évolution réelle des émissions</div>
+        <div class="chart-wrapper"><canvas id="chart-evolution"></canvas></div>
       </div>
 
-      <button class="btn btn-primary" id="btn-create-dashboard">
-        📊 Créer le dashboard Excel natif
-      </button>
-
+      <!-- Saisie historique réel -->
       <div class="card">
-        <div class="card-title">🏷️ Indicateurs KPI</div>
-        <div id="kpi-summary" style="font-size:11px;color:var(--esg-mist)">
-          Calculez d'abord le bilan carbone.
+        <div class="card-title">🗓️ Saisir les années précédentes</div>
+        <p style="font-size:10px;color:var(--esg-mist);margin-bottom:var(--gap-sm)">
+          Entrez les bilans réels des années passées pour afficher une vraie courbe d'évolution.
+        </p>
+        <div class="hist-form">
+          <div class="form-group">
+            <label class="form-label">Année</label>
+            <input class="form-input" id="hist-annee" type="number" placeholder="2022" min="2000" max="2030"/>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Total (tCO2eq)</label>
+            <input class="form-input" id="hist-total" type="number" placeholder="12500"/>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Scope 1</label>
+            <input class="form-input" id="hist-s1" type="number" placeholder="0"/>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Scope 2</label>
+            <input class="form-input" id="hist-s2" type="number" placeholder="0"/>
+          </div>
+          <div class="form-group full">
+            <label class="form-label">Scope 3</label>
+            <input class="form-input" id="hist-s3" type="number" placeholder="0"/>
+          </div>
         </div>
+        <button class="btn btn-primary btn-sm" id="btn-add-historique">➕ Ajouter cette année</button>
+        <div style="margin-top:var(--gap-sm)">
+          <table class="data-table">
+            <thead><tr><th>Année</th><th style="text-align:right">tCO2eq</th><th style="text-align:center">Variation</th></tr></thead>
+            <tbody id="historique-tbody">
+              <tr><td colspan="3" style="text-align:center;color:var(--esg-mist);font-size:10px;padding:12px">Aucune donnée historique saisie</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <button class="btn btn-secondary btn-sm" id="btn-clear-historique" style="margin-top:var(--gap-sm)">🗑️ Effacer l'historique</button>
+      </div>
+
+      <button class="btn btn-primary" id="btn-create-dashboard">📊 Créer le dashboard Excel natif</button>
+      <div class="card">
+        <div class="card-title">🏷️ KPI synthèse</div>
+        <div id="kpi-summary" style="font-size:11px;color:var(--esg-mist)">Calculez d'abord le bilan.</div>
       </div>
     </section>
 
-    <!-- ══════════════════════════════════════════════════════════
-         PANEL ANALYSE
-         ══════════════════════════════════════════════════════════ -->
+    <!-- ══ ANALYSE IA ═════════════════════════════════════════════════════════ -->
     <section id="panel-analyse" class="panel">
-      <div class="section-title">Analyse intelligente</div>
+      <div class="section-title">Analyse intelligente — Gemini AI</div>
 
-      <div class="card">
-        <div class="card-title">⚠️ Anomalies détectées</div>
-        <div id="anomalies-list">
-          <p style="font-size:11px;color:var(--esg-mist)">Calculez d'abord le bilan carbone.</p>
+      <!-- Barre "clé connectée" (affichée quand clé OK) -->
+      <div class="api-connected-bar" id="api-connected-bar">
+        <div class="key-info">
+          <strong id="api-key-display">AIzaSy…••••••••••••••</strong><br>
+          <span>Google AI Studio · Gemini 2.0 Flash</span>
         </div>
+        <button class="btn-change-key" id="btn-change-key">Changer la clé</button>
       </div>
 
-      <div class="card">
-        <div class="card-title">💡 Recommandations de réduction</div>
-        <div id="suggestions-list">
-          <p style="font-size:11px;color:var(--esg-mist)">Calculez d'abord le bilan carbone.</p>
+      <button class="btn btn-primary" id="btn-analyse-ia">✨ Analyser avec Gemini IA</button>
+
+      <div id="ia-result-zone">
+        <div style="font-size:11px;color:var(--esg-mist);text-align:center;padding:24px">
+          Calculez le bilan carbone puis lancez l'analyse.
         </div>
       </div>
-
-      <button class="btn btn-primary" id="btn-analyse">
-        🔍 Lancer l'analyse
-      </button>
     </section>
 
-    <!-- ══════════════════════════════════════════════════════════
-         PANEL RAPPORT
-         ══════════════════════════════════════════════════════════ -->
+    <!-- ══ CHAT IA ════════════════════════════════════════════════════════════ -->
+    <section id="panel-chat" class="panel">
+      <div class="section-title">Chat ESG — Gemini AI</div>
+      <div class="card" style="padding:0;overflow:hidden">
+        <div class="chat-suggestions">
+          <button class="chat-suggestion" data-prompt="Quelles sont mes 3 actions prioritaires pour réduire mes émissions ?">🎯 Priorités</button>
+          <button class="chat-suggestion" data-prompt="Mon bilan est-il conforme aux exigences CSRD ?">📋 CSRD</button>
+          <button class="chat-suggestion" data-prompt="Quelle trajectoire SBTi dois-je viser compte tenu de mon secteur ?">🌡️ SBTi</button>
+          <button class="chat-suggestion" data-prompt="Comment réduire concrètement mon Scope 3 transport ?">🚛 Scope 3</button>
+          <button class="chat-suggestion" data-prompt="Quelle est mon intensité carbone par rapport à la moyenne de mon secteur ?">📊 Benchmark</button>
+        </div>
+        <div class="chat-messages" id="chat-messages">
+          <div class="chat-msg chat-msg--assistant">
+            <div class="chat-bubble">
+              Bonjour ! Je suis votre assistant ESG propulsé par Gemini.<br><br>
+              Calculez votre bilan carbone puis posez-moi vos questions : réglementation CSRD, trajectoires SBTi, actions de réduction, benchmark sectoriel…
+            </div>
+          </div>
+        </div>
+        <div class="chat-input-row">
+          <textarea id="chat-input" placeholder="Votre question ESG… (Entrée pour envoyer)"></textarea>
+          <button class="btn btn-primary" id="btn-chat-send">➤</button>
+        </div>
+        <div class="chat-footer">
+          <span id="chat-counter">0 échange(s)</span>
+          <button id="btn-chat-reset" style="background:none;border:none;color:var(--esg-mist);font-size:9px;cursor:pointer;font-family:var(--font-data)">🔄 Réinitialiser</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ RAPPORT ════════════════════════════════════════════════════════════ -->
     <section id="panel-rapport" class="panel">
       <div class="section-title">Génération du rapport ESG</div>
-
       <div class="card">
         <div class="card-title">📄 Rapport de synthèse</div>
-        <p style="font-size:11px;color:var(--esg-mist);margin-bottom:var(--gap-md)">
-          Le rapport inclut : synthèse KPI, détail Scope 1/2/3, analyse qualité, plan d'actions.
-          Format HTML imprimable → exportable en PDF via Ctrl+P.
+        <p style="font-size:10px;color:var(--esg-mist);margin-bottom:var(--gap-md)">
+          Inclut : KPI, Scope 1/2/3, analyse IA, plan d'actions. Export PDF via Ctrl+P.
         </p>
         <div class="form-group">
           <label class="form-label">Responsable ESG</label>
-          <input class="form-input" id="rapport-responsable" type="text" placeholder="Prénom NOM" />
+          <input class="form-input" id="rapport-responsable" type="text" placeholder="Prénom NOM"/>
         </div>
         <div class="form-group">
-          <label class="form-label">Commentaire de direction</label>
+          <label class="form-label">Message de direction</label>
           <textarea class="form-input" id="rapport-comment" rows="3" placeholder="Message d'introduction…" style="resize:vertical"></textarea>
         </div>
       </div>
-
-      <button class="btn btn-primary" id="btn-open-report">
-        🌐 Ouvrir le rapport (nouvel onglet)
-      </button>
-      <button class="btn btn-secondary" id="btn-download-report">
-        ⬇️ Télécharger le rapport HTML
-      </button>
+      <button class="btn btn-primary"   id="btn-open-report">🌐 Ouvrir le rapport</button>
+      <button class="btn btn-secondary" id="btn-download-report">⬇️ Télécharger HTML</button>
     </section>
 
-  </main><!-- /content-area -->
+  </main>
 
-  <!-- ─── FOOTER ────────────────────────────────────────────── -->
   <footer class="app-footer">
     <span class="footer-info" id="footer-status">Prêt</span>
-    <span class="footer-info">v1.0.0 · GHG Protocol</span>
+    <span class="footer-info">v2.0 · BYOK · Gemini</span>
   </footer>
+</div>
 
-</div><!-- /app-shell -->
-
-<!-- Toast container -->
 <div class="toast-container" id="toast-container"></div>
 
-<!-- Modules JS -->
 <script src="src/modules/carbonCalc.js"></script>
 <script src="src/modules/excelBridge.js"></script>
 <script src="src/modules/reportGenerator.js"></script>
+<script src="src/modules/geminiAI.js"></script>
 <script src="src/app.js"></script>
-
 </body>
 </html>

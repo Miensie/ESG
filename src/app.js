@@ -1,91 +1,131 @@
 /**
  * ============================================================
  * app.js — Orchestrateur principal ESG Analyzer Pro
- * Initialise Office.js, gère la navigation et connecte
- * tous les modules entre eux.
+ * v2.0 — Historique réel + Analyse IA Gemini + Chat interactif
  * ============================================================
  */
 
 "use strict";
 
-// ─── État global de l'application ────────────────────────────────────────────
 const APP_STATE = {
-  ready:       false,
+  ready:        false,
   bilanCurrent: null,
-  rawData:     null,
-  anomalies:   [],
-  suggestions: [],
-  charts:      {},  // Instances Chart.js pour destruction/recréation
+  rawData:      null,
+  anomalies:    [],
+  suggestions:  [],
+  historique:   [],   // [{ annee, total, scope1, scope2, scope3, variation }]
+  charts:       {},
 };
 
-// ─── Point d'entrée : attendre Office.js ─────────────────────────────────────
 Office.onReady(async (info) => {
-  console.log("[App] Office.js prêt :", info.host, info.platform);
-
-  // Vérifier qu'on est bien dans Excel
   if (info.host !== Office.HostType.Excel) {
-    showToast("Ce complément nécessite Microsoft Excel.", "error");
-    return;
+    showToast("Ce complément nécessite Microsoft Excel.", "error"); return;
   }
-
   APP_STATE.ready = true;
   await initApp();
 });
 
-// ─── Initialisation de l'interface ───────────────────────────────────────────
 async function initApp() {
-  // Navigation par onglets
   setupNavigation();
-
-  // Remplir les tableaux de clés d'émission
   populateKeysTable();
 
-  // Récupérer le nom du classeur
   try {
     const name = await ExcelBridge.getWorkbookName();
     document.getElementById("workbook-name").textContent = name;
-  } catch {
-    document.getElementById("workbook-name").textContent = "Excel connecté";
-  }
+  } catch { document.getElementById("workbook-name").textContent = "Excel connecté"; }
 
-  // Bouton initialisation classeur
+  // ── Onboarding BYOK ──────────────────────────────────────────────────────
+  const hasSaved = GeminiAI.loadSavedKey();
+  if (hasSaved) { showApp(); } else { showOnboarding(); }
+
+  document.getElementById("onb-btn-connect").addEventListener("click", handleOnboardingConnect);
+  document.getElementById("onb-key-input").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") handleOnboardingConnect();
+  });
+  document.getElementById("btn-change-key").addEventListener("click", () => {
+    GeminiAI.clearKey(); showOnboarding();
+  });
+
+  // ── Handlers principaux ───────────────────────────────────────────────────
   document.getElementById("btn-init").addEventListener("click", handleInit);
-
-  // Bouton démo
   document.getElementById("btn-demo").addEventListener("click", handleDemo);
-
-  // Bouton lecture données
   document.getElementById("btn-read-data").addEventListener("click", handleReadData);
-
-  // Bouton calcul bilan
   document.getElementById("btn-calc").addEventListener("click", handleCalcBilan);
-
-  // Bouton écriture résultats
   document.getElementById("btn-write-results").addEventListener("click", handleWriteResults);
-
-  // Bouton dashboard Excel natif
   document.getElementById("btn-create-dashboard").addEventListener("click", handleCreateDashboard);
-
-  // Bouton analyse
-  document.getElementById("btn-analyse").addEventListener("click", handleAnalyse);
-
-  // Boutons rapport
-  document.getElementById("btn-open-report").addEventListener("click", () => handleReport("open"));
+  document.getElementById("btn-add-historique").addEventListener("click", handleAddHistorique);
+  document.getElementById("btn-clear-historique").addEventListener("click", handleClearHistorique);
+  document.getElementById("btn-analyse-ia").addEventListener("click", handleAnalyseIA);
+  document.getElementById("btn-chat-send").addEventListener("click", handleChatSend);
+  document.getElementById("btn-chat-reset").addEventListener("click", handleChatReset);
+  document.getElementById("chat-input").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleChatSend(); }
+  });
+  document.querySelectorAll(".chat-suggestion").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.getElementById("chat-input").value = btn.dataset.prompt;
+      handleChatSend();
+    });
+  });
+  document.getElementById("btn-open-report").addEventListener("click",     () => handleReport("open"));
   document.getElementById("btn-download-report").addEventListener("click", () => handleReport("download"));
 
-  setStatus("ESG Analyzer Pro prêt ✓");
-  console.log("[App] Initialisation terminée");
+  setStatus("ESG Analyzer Pro v2.0 prêt ✓");
 }
 
-// ─── Navigation par onglets ───────────────────────────────────────────────────
-function setupNavigation() {
-  const tabs   = document.querySelectorAll(".nav-tab");
-  const panels = document.querySelectorAll(".panel");
+// ── Onboarding ────────────────────────────────────────────────────────────────
 
-  tabs.forEach(tab => {
+function showOnboarding() {
+  document.getElementById("onboarding-overlay").classList.remove("hidden");
+  document.getElementById("app-shell").style.display = "none";
+  document.getElementById("onb-key-input").value = "";
+  const s = document.getElementById("onb-status");
+  s.textContent = "Entrez votre clé API pour commencer.";
+  s.className = "onb-status info";
+}
+
+function showApp() {
+  document.getElementById("onboarding-overlay").classList.add("hidden");
+  document.getElementById("app-shell").style.display = "";
+  const masked = GeminiAI.getMaskedKey();
+  if (masked) document.getElementById("api-key-display").textContent = masked;
+}
+
+async function handleOnboardingConnect() {
+  const input  = document.getElementById("onb-key-input");
+  const btn    = document.getElementById("onb-btn-connect");
+  const status = document.getElementById("onb-status");
+  const key    = input.value.trim();
+
+  if (!key) {
+    status.textContent = "Collez votre clé API (commence par AIza…)";
+    status.className = "onb-status error"; return;
+  }
+
+  btn.disabled = true;
+  document.getElementById("onb-btn-text").innerHTML = `<span class="spinner"></span> Test de connexion…`;
+  status.textContent = "Connexion à Google AI Studio…";
+  status.className = "onb-status info";
+
+  try {
+    await GeminiAI.testConnection(key);
+    GeminiAI.saveKey(key);
+    status.textContent = "✅ Connexion réussie !";
+    status.className = "onb-status ok";
+    setTimeout(() => showApp(), 800);
+  } catch (e) {
+    status.textContent = `❌ ${e.message}`;
+    status.className = "onb-status error";
+    btn.disabled = false;
+    document.getElementById("onb-btn-text").textContent = "✓ Connecter et tester";
+  }
+}
+
+function setupNavigation() {
+  document.querySelectorAll(".nav-tab").forEach(tab => {
     tab.addEventListener("click", () => {
-      tabs.forEach(t => t.classList.remove("active"));
-      panels.forEach(p => p.classList.remove("active"));
+      document.querySelectorAll(".nav-tab").forEach(t => t.classList.remove("active"));
+      document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
       tab.classList.add("active");
       const target = document.getElementById(tab.dataset.panel);
       if (target) target.classList.add("active");
@@ -93,7 +133,6 @@ function setupNavigation() {
   });
 }
 
-// ─── Popule les tables de clés d'émission ────────────────────────────────────
 function populateKeysTable() {
   const EF = CarbonCalc.EMISSION_FACTORS;
   ["scope1", "scope2", "scope3"].forEach(scope => {
@@ -104,414 +143,450 @@ function populateKeysTable() {
       tr.innerHTML = `
         <td style="font-family:var(--font-data);font-size:10px;color:var(--esg-mint)">${key}</td>
         <td style="font-size:10px">${ef.label}</td>
-        <td style="font-family:var(--font-data);font-size:10px;color:var(--esg-mist)">${ef.unit}</td>
-      `;
+        <td style="font-family:var(--font-data);font-size:10px;color:var(--esg-mist)">${ef.unit}</td>`;
       tbody.appendChild(tr);
     });
   });
 }
 
-// ─── Handlers des actions ──────────────────────────────────────────────────────
+// ── Handlers ──────────────────────────────────────────────────────────────────
 
-/** 1. Initialiser le classeur Excel */
 async function handleInit() {
   setBtnLoading("btn-init", true, "Initialisation…");
   try {
     await ExcelBridge.initWorkbook();
-    showToast("✅ Classeur ESG initialisé — feuilles créées !", "success");
-    log("collecte", "success", "Classeur initialisé avec les feuilles de collecte");
-    setStatus("Classeur initialisé");
-  } catch (e) {
-    showToast("Erreur lors de l'initialisation", "error");
-    log("collecte", "error", e.message);
-  }
+    showToast("✅ Classeur ESG initialisé !", "success");
+    log("collecte", "success", "Feuilles de collecte créées");
+  } catch (e) { showToast("Erreur initialisation", "error"); log("collecte", "error", e.message); }
   setBtnLoading("btn-init", false, "🚀 Initialiser le classeur ESG");
 }
 
-/** 2. Charger les données démo */
 function handleDemo() {
   APP_STATE.rawData = CarbonCalc.getDemoData();
-
-  // Pré-remplir la config
   document.getElementById("cfg-entreprise").value = APP_STATE.rawData.entreprise;
   document.getElementById("cfg-annee").value       = APP_STATE.rawData.annee;
   document.getElementById("cfg-ca").value          = APP_STATE.rawData.chiffreAffaires;
-
-  log("collecte", "success", `Données démo chargées : ${APP_STATE.rawData.entreprise}`);
-  log("collecte", "info", `Scope 1 : ${APP_STATE.rawData.scope1.length} sources`);
-  log("collecte", "info", `Scope 2 : ${APP_STATE.rawData.scope2.length} sources`);
-  log("collecte", "info", `Scope 3 : ${APP_STATE.rawData.scope3.length} sources`);
-  showToast("🎯 Données démo chargées — Calculez le bilan !", "info");
-  setStatus("Données démo en mémoire");
+  log("collecte", "success", `Données démo : ${APP_STATE.rawData.entreprise}`);
+  showToast("🎯 Données démo chargées", "info");
 }
 
-/** 3. Lire les données depuis Excel */
 async function handleReadData() {
   setBtnLoading("btn-read-data", true, "Lecture…");
   try {
     APP_STATE.rawData = await ExcelBridge.readESGData();
-    const total = APP_STATE.rawData.scope1.length
-                + APP_STATE.rawData.scope2.length
-                + APP_STATE.rawData.scope3.length;
-    log("collecte", "success", `${total} lignes lues depuis Excel`);
-    log("collecte", "info", `Entreprise : ${APP_STATE.rawData.entreprise || "—"}`);
-    log("collecte", "info", `Scope 1 : ${APP_STATE.rawData.scope1.length} | Scope 2 : ${APP_STATE.rawData.scope2.length} | Scope 3 : ${APP_STATE.rawData.scope3.length}`);
-    showToast(`✅ ${total} lignes lues depuis Excel`, "success");
-    setStatus(`${total} lignes ESG collectées`);
-  } catch (e) {
-    showToast("Erreur lecture Excel", "error");
-    log("collecte", "error", e.message);
-  }
+    const n = APP_STATE.rawData.scope1.length + APP_STATE.rawData.scope2.length + APP_STATE.rawData.scope3.length;
+    log("collecte", "success", `${n} lignes lues`);
+    showToast(`✅ ${n} lignes lues depuis Excel`, "success");
+  } catch (e) { showToast("Erreur lecture Excel", "error"); log("collecte", "error", e.message); }
   setBtnLoading("btn-read-data", false, "📖 Lire les données depuis Excel");
 }
 
-/** 4. Calculer le bilan carbone */
 async function handleCalcBilan() {
-  if (!APP_STATE.rawData) {
-    showToast("Chargez d'abord les données (Collecte)", "error");
-    return;
-  }
-
+  if (!APP_STATE.rawData) { showToast("Chargez d'abord les données", "error"); return; }
   setBtnLoading("btn-calc", true, "Calcul en cours…");
-
-  // Enrichir avec la config UI si modifiée
   APP_STATE.rawData.entreprise      = document.getElementById("cfg-entreprise").value || APP_STATE.rawData.entreprise;
   APP_STATE.rawData.annee           = parseInt(document.getElementById("cfg-annee").value) || APP_STATE.rawData.annee;
   APP_STATE.rawData.chiffreAffaires = parseFloat(document.getElementById("cfg-ca").value) || APP_STATE.rawData.chiffreAffaires;
-
   try {
     const bilan = CarbonCalc.computeFullBilan(APP_STATE.rawData);
     APP_STATE.bilanCurrent = bilan;
-
-    // Mettre à jour les KPI
     updateBilanUI(bilan);
-
-    // Dessiner les graphiques inline
     drawScopePieChart(bilan);
     drawSourcesBarChart(bilan);
     drawEvolutionChart(bilan);
-
-    // Mettre à jour le dashboard KPI summary
     updateKPISummary(bilan);
-
-    showToast(`✅ Bilan calculé : ${bilan.grandTotal.toLocaleString("fr-FR")} tCO2eq`, "success");
+    showToast(`✅ ${bilan.grandTotal.toLocaleString("fr-FR")} tCO2eq calculés`, "success");
     setStatus(`Bilan ${bilan.annee} calculé`);
-  } catch (e) {
-    showToast("Erreur calcul bilan", "error");
-    console.error(e);
-  }
-
+  } catch (e) { showToast("Erreur calcul", "error"); console.error(e); }
   setBtnLoading("btn-calc", false, "♻️ Calculer le bilan carbone");
 }
 
-/** 5. Écrire les résultats dans Excel */
 async function handleWriteResults() {
-  if (!APP_STATE.bilanCurrent) {
-    showToast("Calculez d'abord le bilan carbone", "error");
-    return;
-  }
+  if (!APP_STATE.bilanCurrent) { showToast("Calculez d'abord le bilan", "error"); return; }
   setBtnLoading("btn-write-results", true, "Écriture…");
   try {
     await ExcelBridge.writeResultats(APP_STATE.bilanCurrent);
     showToast("✅ Résultats écrits dans ESG_Resultats", "success");
-  } catch (e) {
-    showToast("Erreur écriture Excel", "error");
-  }
+  } catch (e) { showToast("Erreur écriture Excel", "error"); }
   setBtnLoading("btn-write-results", false, "💾 Écrire dans Excel");
 }
 
-/** 6. Créer le dashboard Excel natif */
 async function handleCreateDashboard() {
-  if (!APP_STATE.bilanCurrent) {
-    showToast("Calculez d'abord le bilan carbone", "error");
-    return;
-  }
+  if (!APP_STATE.bilanCurrent) { showToast("Calculez d'abord le bilan", "error"); return; }
   setBtnLoading("btn-create-dashboard", true, "Création…");
   try {
     await ExcelBridge.createDashboard(APP_STATE.bilanCurrent);
-    showToast("✅ Dashboard Excel créé avec graphiques natifs !", "success");
-  } catch (e) {
-    showToast("Erreur création dashboard", "error");
-    console.error(e);
-  }
+    showToast("✅ Dashboard Excel créé !", "success");
+  } catch (e) { showToast("Erreur dashboard", "error"); console.error(e); }
   setBtnLoading("btn-create-dashboard", false, "📊 Créer le dashboard Excel natif");
 }
 
-/** 7. Analyse anomalies + suggestions */
-function handleAnalyse() {
-  if (!APP_STATE.bilanCurrent) {
-    showToast("Calculez d'abord le bilan carbone", "error");
-    return;
+// ── Historique réel ───────────────────────────────────────────────────────────
+
+function handleAddHistorique() {
+  const annee  = parseInt(document.getElementById("hist-annee").value);
+  const total  = parseFloat(document.getElementById("hist-total").value);
+  const scope1 = parseFloat(document.getElementById("hist-s1").value) || 0;
+  const scope2 = parseFloat(document.getElementById("hist-s2").value) || 0;
+  const scope3 = parseFloat(document.getElementById("hist-s3").value) || 0;
+
+  if (!annee || !total || isNaN(annee) || isNaN(total)) {
+    showToast("Année et total sont requis", "error"); return;
+  }
+  if (APP_STATE.historique.find(h => h.annee === annee)) {
+    showToast(`Année ${annee} déjà présente`, "error"); return;
   }
 
-  APP_STATE.anomalies   = CarbonCalc.detectAnomalies(APP_STATE.bilanCurrent);
-  APP_STATE.suggestions = CarbonCalc.generateSuggestions(APP_STATE.bilanCurrent);
+  APP_STATE.historique.push({ annee, total, scope1, scope2, scope3, variation: null });
+  APP_STATE.historique.sort((a, b) => a.annee - b.annee);
+  APP_STATE.historique.forEach((h, i) => {
+    h.variation = i === 0 ? null
+      : parseFloat(((h.total - APP_STATE.historique[i-1].total) / APP_STATE.historique[i-1].total * 100).toFixed(1));
+  });
 
-  updateAnomaliesUI(APP_STATE.anomalies);
-  updateSuggestionsUI(APP_STATE.suggestions);
+  ["hist-annee","hist-total","hist-s1","hist-s2","hist-s3"].forEach(id => {
+    document.getElementById(id).value = "";
+  });
 
-  const n = APP_STATE.anomalies.length;
-  showToast(`🔍 Analyse terminée : ${n} anomalie(s) détectée(s)`, n > 0 ? "info" : "success");
+  renderHistoriqueTable();
+  if (APP_STATE.bilanCurrent) drawEvolutionChart(APP_STATE.bilanCurrent);
+  showToast(`✅ Année ${annee} ajoutée`, "success");
 }
 
-/** 8. Rapport ESG */
-function handleReport(action) {
-  if (!APP_STATE.bilanCurrent) {
-    showToast("Calculez d'abord le bilan carbone", "error");
+function handleClearHistorique() {
+  APP_STATE.historique = [];
+  renderHistoriqueTable();
+  if (APP_STATE.bilanCurrent) drawEvolutionChart(APP_STATE.bilanCurrent);
+  showToast("Historique effacé", "info");
+}
+
+function renderHistoriqueTable() {
+  const tbody = document.getElementById("historique-tbody");
+  if (!tbody) return;
+  if (!APP_STATE.historique.length) {
+    tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;color:var(--esg-mist);font-size:10px;padding:12px">Aucune donnée — saisissez vos années précédentes ci-dessus</td></tr>`;
     return;
   }
-  if (action === "open") {
-    ReportGenerator.openReport(
-      APP_STATE.bilanCurrent,
-      APP_STATE.anomalies,
-      APP_STATE.suggestions
-    );
-    showToast("📄 Rapport ouvert dans un nouvel onglet", "info");
+  tbody.innerHTML = APP_STATE.historique.map(h => {
+    const varHtml = h.variation === null ? `<span style="color:var(--esg-mist)">référence</span>`
+      : h.variation > 0 ? `<span style="color:var(--esg-danger)">▲ +${h.variation}%</span>`
+      : `<span style="color:var(--esg-mint)">▼ ${h.variation}%</span>`;
+    return `<tr>
+      <td style="font-family:var(--font-data);font-weight:600">${h.annee}</td>
+      <td style="font-family:var(--font-data);text-align:right">${h.total.toLocaleString("fr-FR")}</td>
+      <td style="text-align:center;font-size:11px">${varHtml}</td>
+    </tr>`;
+  }).join("");
+}
+
+// ── Analyse IA Gemini ─────────────────────────────────────────────────────────
+
+
+async function handleAnalyseIA() {
+  if (!APP_STATE.bilanCurrent) { showToast("Calculez d'abord le bilan", "error"); return; }
+  if (!GeminiAI.hasApiKey())   { showToast("Configurez votre clé API Gemini", "error"); return; }
+
+  setBtnLoading("btn-analyse-ia", true, "Analyse IA en cours…");
+  document.getElementById("ia-result-zone").innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;color:var(--esg-mist);font-size:12px;padding:16px">
+      <span class="spinner"></span> Gemini analyse votre bilan carbone…
+    </div>`;
+
+  try {
+    const result = await GeminiAI.analyzeBilan(APP_STATE.bilanCurrent, APP_STATE.historique);
+    APP_STATE.anomalies   = result.anomalies   || [];
+    APP_STATE.suggestions = result.suggestions || [];
+    renderIAResult(result);
+    showToast(`✅ ${APP_STATE.anomalies.length} anomalie(s) détectée(s) par l'IA`, "success");
+    setStatus("Analyse Gemini terminée");
+  } catch (e) {
+    document.getElementById("ia-result-zone").innerHTML =
+      `<div class="anomaly-item"><span class="anomaly-icon">❌</span><div class="anomaly-text"><strong>Erreur API Gemini</strong>${e.message}</div></div>`;
+    showToast(e.message, "error");
+  }
+  setBtnLoading("btn-analyse-ia", false, "✨ Analyser avec Gemini IA");
+}
+
+function renderIAResult(result) {
+  let html = "";
+
+  if (result.contexte) {
+    html += `<div class="card"><div class="card-title">🎯 Synthèse IA</div>
+      <p style="font-size:12px;line-height:1.6">${GeminiAI.formatResponseHTML(result.contexte)}</p></div>`;
+  }
+
+  if (result.tendance?.commentaire) {
+    const traj = result.tendance.trajectoire || "—";
+    const trajColor = traj.includes("baisse") ? "var(--esg-mint)"
+      : traj.includes("hausse") ? "var(--esg-danger)" : "var(--esg-warning)";
+    html += `<div class="card"><div class="card-title">📈 Tendance</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <span style="font-family:var(--font-data);font-weight:700;color:${trajColor}">${traj}</span>
+        ${result.tendance.alerteCSRD ? `<span style="background:rgba(245,166,35,0.2);color:var(--esg-warning);padding:2px 8px;border-radius:12px;font-size:9px;font-weight:700">⚠️ ALERTE CSRD</span>` : ""}
+      </div>
+      <p style="font-size:11px;color:var(--esg-mist)">${GeminiAI.formatResponseHTML(result.tendance.commentaire)}</p>
+      ${result.tendance.alerteSBTi ? `<p style="font-size:11px;color:var(--esg-warning);margin-top:6px">🎯 SBTi : ${GeminiAI.formatResponseHTML(result.tendance.alerteSBTi)}</p>` : ""}
+    </div>`;
+  }
+
+  if (result.anomalies?.length) {
+    html += `<div class="section-title">⚠️ Anomalies</div>`;
+    html += result.anomalies.map(a => `
+      <div class="anomaly-item">
+        <span class="anomaly-icon">${a.severity==="error"?"🔴":a.severity==="warn"?"🟡":"🔵"}</span>
+        <div class="anomaly-text"><strong>${a.titre||a.scope}</strong>${GeminiAI.formatResponseHTML(a.message)}</div>
+      </div>`).join("");
   } else {
-    ReportGenerator.downloadReport(
-      APP_STATE.bilanCurrent,
-      APP_STATE.anomalies,
-      APP_STATE.suggestions
-    );
-    showToast("⬇️ Rapport téléchargé", "success");
+    html += `<div class="suggestion-item" style="margin-bottom:8px">
+      <span class="anomaly-icon">✅</span><span style="font-size:12px">Aucune anomalie critique.</span></div>`;
+  }
+
+  if (result.suggestions?.length) {
+    html += `<div class="section-title" style="margin-top:var(--gap-md)">💡 Plan d'actions IA</div>`;
+    const pIcon = { high:"🔥", medium:"💡", low:"💚" };
+    html += result.suggestions.map(s => `
+      <div class="suggestion-item" style="flex-direction:column;align-items:flex-start;gap:6px">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          <span>${pIcon[s.priority]||"💡"}</span>
+          <span class="scope-badge s${(s.scope||"").slice(-1)||"3"}">${s.scope}</span>
+          ${s.delai?`<span style="font-size:9px;color:var(--esg-mist)">${s.delai}</span>`:""}
+          ${s.referentiel?`<span style="font-size:9px;color:var(--esg-mist);font-style:italic">${s.referentiel}</span>`:""}
+        </div>
+        <strong style="font-size:12px">${s.action}</strong>
+        <span style="font-size:11px;color:var(--esg-mist)">${GeminiAI.formatResponseHTML(s.detail)}</span>
+        <span style="color:var(--esg-mint);font-size:11px;font-weight:600">↘ ${s.potentiel}</span>
+      </div>`).join("");
+  }
+
+  document.getElementById("ia-result-zone").innerHTML = html;
+}
+
+// ── Chat IA ───────────────────────────────────────────────────────────────────
+
+async function handleChatSend() {
+  const input = document.getElementById("chat-input");
+  const msg   = input.value.trim();
+  if (!msg) return;
+  if (!GeminiAI.hasApiKey())   { showToast("Configurez votre clé API (onglet Analyse IA)", "error"); return; }
+  if (!APP_STATE.bilanCurrent) { showToast("Calculez d'abord le bilan carbone", "error"); return; }
+
+  input.value = "";
+  appendChatMessage("user", msg);
+  setChatLoading(true);
+  try {
+    const response = await GeminiAI.sendChatMessage(msg, APP_STATE.bilanCurrent);
+    appendChatMessage("assistant", response);
+    updateChatCounter();
+  } catch (e) {
+    appendChatMessage("error", `❌ ${e.message}`);
+    showToast(e.message, "error");
+  }
+  setChatLoading(false);
+}
+
+function handleChatReset() {
+  GeminiAI.resetChat();
+  document.getElementById("chat-messages").innerHTML = `
+    <div class="chat-msg chat-msg--assistant">
+      <div class="chat-bubble">Conversation réinitialisée. Posez vos questions ESG.</div>
+    </div>`;
+  updateChatCounter();
+}
+
+function appendChatMessage(role, text) {
+  const container = document.getElementById("chat-messages");
+  const div = document.createElement("div");
+  div.className = `chat-msg chat-msg--${role}`;
+  const bubble = document.createElement("div");
+  bubble.className = "chat-bubble";
+  if (role === "assistant") {
+    bubble.innerHTML = GeminiAI.formatResponseHTML(text);
+  } else if (role === "error") {
+    bubble.style.cssText = "background:rgba(224,82,82,0.15);border-color:var(--esg-danger)";
+    bubble.textContent = text;
+  } else {
+    bubble.textContent = text;
+  }
+  div.appendChild(bubble);
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+function setChatLoading(loading) {
+  document.getElementById("btn-chat-send").disabled  = loading;
+  document.getElementById("chat-input").disabled     = loading;
+  if (loading) {
+    const container = document.getElementById("chat-messages");
+    const div = document.createElement("div");
+    div.className = "chat-msg chat-msg--assistant"; div.id = "chat-typing";
+    div.innerHTML = `<div class="chat-bubble"><span class="spinner"></span></div>`;
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+  } else {
+    document.getElementById("chat-typing")?.remove();
   }
 }
 
-// ─── Mise à jour UI Bilan ─────────────────────────────────────────────────────
-function updateBilanUI(bilan) {
-  const fmt = v => v.toLocaleString("fr-FR", { minimumFractionDigits: 0 });
-  document.getElementById("kpi-s1").textContent = fmt(bilan.scope1.total);
-  document.getElementById("kpi-s2").textContent = fmt(bilan.scope2.total);
-  document.getElementById("kpi-s3").textContent = fmt(bilan.scope3.total);
-  document.getElementById("kpi-total").textContent = fmt(bilan.grandTotal);
+function updateChatCounter() {
+  const el = document.getElementById("chat-counter");
+  if (el) el.textContent = `${GeminiAI.getChatLength()} échange(s)`;
+}
 
-  // Progress bars
+// ── Rapport ───────────────────────────────────────────────────────────────────
+
+function handleReport(action) {
+  if (!APP_STATE.bilanCurrent) { showToast("Calculez d'abord le bilan", "error"); return; }
+  if (action === "open") {
+    ReportGenerator.openReport(APP_STATE.bilanCurrent, APP_STATE.anomalies, APP_STATE.suggestions);
+  } else {
+    ReportGenerator.downloadReport(APP_STATE.bilanCurrent, APP_STATE.anomalies, APP_STATE.suggestions);
+  }
+}
+
+// ── UI helpers ────────────────────────────────────────────────────────────────
+
+function updateBilanUI(bilan) {
+  const fmt = v => v.toLocaleString("fr-FR");
+  document.getElementById("kpi-s1").textContent    = fmt(bilan.scope1.total);
+  document.getElementById("kpi-s2").textContent    = fmt(bilan.scope2.total);
+  document.getElementById("kpi-s3").textContent    = fmt(bilan.scope3.total);
+  document.getElementById("kpi-total").textContent = fmt(bilan.grandTotal);
   const max = Math.max(bilan.scope1.total, bilan.scope2.total, bilan.scope3.total);
   ["s1","s2","s3"].forEach((id, i) => {
     const val = [bilan.scope1.total, bilan.scope2.total, bilan.scope3.total][i];
-    const bar = document.getElementById(`bar-${id}`);
-    if (bar) bar.style.width = `${Math.round((val / (max||1)) * 100)}%`;
+    document.getElementById(`bar-${id}`)?.style.setProperty("width", `${Math.round(val/(max||1)*100)}%`);
   });
-
-  // Intensité
-  document.getElementById("kpi-intensite").textContent =
-    `${bilan.intensite} ${bilan.intensiteUnit || ""}`;
-  document.getElementById("label-intensite").textContent =
-    `Intensité carbone (${bilan.intensiteUnit || "non calculée"})`;
-
-  // Table détail
+  document.getElementById("kpi-intensite").textContent  = `${bilan.intensite} ${bilan.intensiteUnit||""}`;
+  document.getElementById("label-intensite").textContent = `Intensité (${bilan.intensiteUnit||"—"})`;
   const tbody = document.getElementById("table-bilan");
   tbody.innerHTML = "";
-  const scopeColor = { scope1: "#E05252", scope2: "#F5A623", scope3: "#2ECC8E" };
+  const c = { scope1:"#E05252", scope2:"#F5A623", scope3:"#2ECC8E" };
   ["scope1","scope2","scope3"].forEach(scope => {
     bilan[scope].lines.forEach(line => {
-      const tr = document.createElement("tr");
-      const badge = scope.replace("scope","S");
-      tr.innerHTML = `
+      tbody.insertAdjacentHTML("beforeend", `<tr>
         <td style="font-size:10px">${line.source}</td>
-        <td><span class="scope-badge s${scope.slice(-1)}">${badge}</span></td>
-        <td style="font-family:var(--font-data);text-align:right;color:${scopeColor[scope]}">${line.tCO2eq.toLocaleString("fr-FR",{minimumFractionDigits:2})}</td>
-      `;
-      tbody.appendChild(tr);
+        <td><span class="scope-badge s${scope.slice(-1)}">${scope.replace("scope","S")}</span></td>
+        <td style="font-family:var(--font-data);text-align:right;color:${c[scope]}">${line.tCO2eq.toLocaleString("fr-FR",{minimumFractionDigits:2})}</td>
+      </tr>`);
     });
   });
 }
 
 function updateKPISummary(bilan) {
-  const el = document.getElementById("kpi-summary");
-  el.innerHTML = `
+  document.getElementById("kpi-summary").innerHTML = `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-      <div><span style="color:var(--esg-mist);font-size:9px;text-transform:uppercase;letter-spacing:.08em">Entreprise</span><br><strong>${bilan.entreprise}</strong></div>
-      <div><span style="color:var(--esg-mist);font-size:9px;text-transform:uppercase;letter-spacing:.08em">Année</span><br><strong>${bilan.annee}</strong></div>
-      <div><span style="color:var(--esg-mist);font-size:9px;text-transform:uppercase;letter-spacing:.08em">Total émissions</span><br><strong style="color:var(--esg-mint)">${bilan.grandTotal.toLocaleString("fr-FR")} tCO2eq</strong></div>
-      <div><span style="color:var(--esg-mist);font-size:9px;text-transform:uppercase;letter-spacing:.08em">Intensité</span><br><strong>${bilan.intensite} ${bilan.intensiteUnit||""}</strong></div>
-    </div>
-  `;
+      <div><span style="color:var(--esg-mist);font-size:9px;text-transform:uppercase">Entreprise</span><br><strong>${bilan.entreprise}</strong></div>
+      <div><span style="color:var(--esg-mist);font-size:9px;text-transform:uppercase">Année</span><br><strong>${bilan.annee}</strong></div>
+      <div><span style="color:var(--esg-mist);font-size:9px;text-transform:uppercase">Total</span><br><strong style="color:var(--esg-mint)">${bilan.grandTotal.toLocaleString("fr-FR")} tCO2eq</strong></div>
+      <div><span style="color:var(--esg-mist);font-size:9px;text-transform:uppercase">Intensité</span><br><strong>${bilan.intensite} ${bilan.intensiteUnit||""}</strong></div>
+    </div>`;
 }
 
-// ─── Graphiques Chart.js ──────────────────────────────────────────────────────
+// ── Charts ────────────────────────────────────────────────────────────────────
+
 function destroyChart(id) {
-  if (APP_STATE.charts[id]) {
-    APP_STATE.charts[id].destroy();
-    delete APP_STATE.charts[id];
-  }
+  if (APP_STATE.charts[id]) { APP_STATE.charts[id].destroy(); delete APP_STATE.charts[id]; }
 }
 
 function drawScopePieChart(bilan) {
   destroyChart("scopes");
-  const canvas = document.getElementById("chart-scopes");
-  if (!canvas) return;
+  const canvas = document.getElementById("chart-scopes"); if (!canvas) return;
   APP_STATE.charts["scopes"] = new Chart(canvas, {
     type: "doughnut",
-    data: {
-      labels: [`Scope 1 (${bilan.scope1.pct}%)`, `Scope 2 (${bilan.scope2.pct}%)`, `Scope 3 (${bilan.scope3.pct}%)`],
-      datasets: [{
-        data: [bilan.scope1.total, bilan.scope2.total, bilan.scope3.total],
-        backgroundColor: ["#E05252","#F5A623","#2ECC8E"],
-        borderColor: "#1C2B3A",
-        borderWidth: 2,
-        hoverOffset: 8,
-      }]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      cutout: "60%",
-      plugins: {
-        legend: { position: "bottom", labels: { color: "#8BA5B8", font: { size: 10 }, padding: 12 } },
-        tooltip: { callbacks: { label: ctx => ` ${ctx.label} : ${ctx.raw.toLocaleString("fr-FR")} tCO2eq` } }
-      }
-    }
+    data: { labels: [`S1 (${bilan.scope1.pct}%)`,`S2 (${bilan.scope2.pct}%)`,`S3 (${bilan.scope3.pct}%)`],
+      datasets: [{ data: [bilan.scope1.total, bilan.scope2.total, bilan.scope3.total],
+        backgroundColor: ["#E05252","#F5A623","#2ECC8E"], borderColor: "#1C2B3A", borderWidth:2, hoverOffset:8 }] },
+    options: { responsive:true, maintainAspectRatio:false, cutout:"60%",
+      plugins: { legend:{ position:"bottom", labels:{ color:"#8BA5B8", font:{size:10}, padding:12 } },
+        tooltip:{ callbacks:{ label: ctx => ` ${ctx.label} : ${ctx.raw.toLocaleString("fr-FR")} tCO2eq` } } } }
   });
 }
 
 function drawSourcesBarChart(bilan) {
   destroyChart("sources");
-  const canvas = document.getElementById("chart-sources");
-  if (!canvas) return;
-
-  const allLines = [
-    ...bilan.scope1.lines.map(l => ({...l, scope: 1})),
-    ...bilan.scope2.lines.map(l => ({...l, scope: 2})),
-    ...bilan.scope3.lines.map(l => ({...l, scope: 3})),
-  ].sort((a,b) => b.tCO2eq - a.tCO2eq).slice(0, 12);
-
-  const colors = { 1: "#E05252", 2: "#F5A623", 3: "#2ECC8E" };
+  const canvas = document.getElementById("chart-sources"); if (!canvas) return;
+  const allLines = [...bilan.scope1.lines.map(l=>({...l,scope:1})), ...bilan.scope2.lines.map(l=>({...l,scope:2})),
+    ...bilan.scope3.lines.map(l=>({...l,scope:3}))].sort((a,b)=>b.tCO2eq-a.tCO2eq).slice(0,12);
+  const colors = {1:"#E05252",2:"#F5A623",3:"#2ECC8E"};
   APP_STATE.charts["sources"] = new Chart(canvas, {
-    type: "bar",
-    data: {
-      labels: allLines.map(l => l.source.substring(0, 18)),
-      datasets: [{
-        data: allLines.map(l => l.tCO2eq),
-        backgroundColor: allLines.map(l => colors[l.scope] + "CC"),
-        borderColor: allLines.map(l => colors[l.scope]),
-        borderWidth: 1,
-        borderRadius: 4,
-      }]
-    },
-    options: {
-      indexAxis: "y",
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { ticks: { color: "#8BA5B8", font: { size: 9 } }, grid: { color: "rgba(255,255,255,0.05)" } },
-        y: { ticks: { color: "#8BA5B8", font: { size: 9 } }, grid: { display: false } }
-      }
-    }
+    type:"bar", data:{ labels: allLines.map(l=>l.source.substring(0,18)),
+      datasets:[{ data: allLines.map(l=>l.tCO2eq), backgroundColor: allLines.map(l=>colors[l.scope]+"CC"),
+        borderColor: allLines.map(l=>colors[l.scope]), borderWidth:1, borderRadius:4 }] },
+    options:{ indexAxis:"y", responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+      scales:{ x:{ticks:{color:"#8BA5B8",font:{size:9}},grid:{color:"rgba(255,255,255,0.05)"}},
+               y:{ticks:{color:"#8BA5B8",font:{size:9}},grid:{display:false}} } }
   });
 }
 
+/**
+ * Graphique d'évolution — 100% données réelles depuis APP_STATE.historique
+ * Affiche un message si pas encore d'historique saisi.
+ */
 function drawEvolutionChart(bilan) {
   destroyChart("evolution");
-  const canvas = document.getElementById("chart-evolution");
-  if (!canvas) return;
+  const canvas = document.getElementById("chart-evolution"); if (!canvas) return;
 
-  // Simulation d'évolution N-3 → N (objectif -4%/an)
-  const years = [bilan.annee - 3, bilan.annee - 2, bilan.annee - 1, bilan.annee];
-  const coeff = [1.126, 1.071, 1.034, 1.0];
-  const totals = coeff.map(c => Math.round(bilan.grandTotal * c));
+  const allPoints = [
+    ...APP_STATE.historique.map(h => ({ annee:h.annee, total:h.total, s1:h.scope1, s2:h.scope2, s3:h.scope3 })),
+    { annee:bilan.annee, total:bilan.grandTotal, s1:bilan.scope1.total, s2:bilan.scope2.total, s3:bilan.scope3.total }
+  ].filter((p,i,a) => a.findIndex(x=>x.annee===p.annee)===i).sort((a,b)=>a.annee-b.annee);
+
+  if (allPoints.length === 1) {
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle="#8BA5B8"; ctx.font="11px sans-serif"; ctx.textAlign="center";
+    ctx.fillText("Saisissez vos années précédentes dans l'onglet Dashboard", canvas.width/2, canvas.height/2-8);
+    ctx.fillText("pour afficher la vraie courbe d'évolution.", canvas.width/2, canvas.height/2+10);
+    return;
+  }
 
   APP_STATE.charts["evolution"] = new Chart(canvas, {
-    type: "line",
-    data: {
-      labels: years.map(String),
-      datasets: [{
-        label: "Total (tCO2eq)",
-        data: totals,
-        borderColor: "#2ECC8E",
-        backgroundColor: "rgba(46,204,142,0.1)",
-        fill: true,
-        tension: 0.4,
-        pointBackgroundColor: "#2ECC8E",
-        pointRadius: 5,
-      }]
+    type:"line",
+    data:{ labels: allPoints.map(p=>String(p.annee)),
+      datasets:[
+        { label:"Total", data:allPoints.map(p=>p.total), borderColor:"#2ECC8E", backgroundColor:"rgba(46,204,142,0.08)",
+          fill:true, tension:0.3, pointBackgroundColor:"#2ECC8E", pointRadius:5, borderWidth:2 },
+        { label:"Scope 1", data:allPoints.map(p=>p.s1), borderColor:"#E05252", tension:0.3,
+          pointBackgroundColor:"#E05252", pointRadius:3, borderWidth:1.5, borderDash:[4,3], backgroundColor:"transparent" },
+        { label:"Scope 2", data:allPoints.map(p=>p.s2), borderColor:"#F5A623", tension:0.3,
+          pointBackgroundColor:"#F5A623", pointRadius:3, borderWidth:1.5, borderDash:[4,3], backgroundColor:"transparent" },
+        { label:"Scope 3", data:allPoints.map(p=>p.s3), borderColor:"#1D8348", tension:0.3,
+          pointBackgroundColor:"#1D8348", pointRadius:3, borderWidth:1.5, borderDash:[4,3], backgroundColor:"transparent" },
+      ]
     },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { labels: { color: "#8BA5B8", font: { size: 10 } } } },
-      scales: {
-        x: { ticks: { color: "#8BA5B8", font: { size: 10 } }, grid: { color: "rgba(255,255,255,0.05)" } },
-        y: { ticks: { color: "#8BA5B8", font: { size: 10 } }, grid: { color: "rgba(255,255,255,0.05)" } }
-      }
-    }
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ labels:{ color:"#8BA5B8", font:{size:9}, boxWidth:12 } },
+        tooltip:{ callbacks:{ label: ctx => ` ${ctx.dataset.label} : ${ctx.raw.toLocaleString("fr-FR")} tCO2eq` } } },
+      scales:{ x:{ticks:{color:"#8BA5B8",font:{size:10}},grid:{color:"rgba(255,255,255,0.05)"}},
+               y:{ticks:{color:"#8BA5B8",font:{size:10}},grid:{color:"rgba(255,255,255,0.05)"}} } }
   });
 }
 
-// ─── Mise à jour UI Analyse ───────────────────────────────────────────────────
-function updateAnomaliesUI(anomalies) {
-  const el = document.getElementById("anomalies-list");
-  if (!anomalies.length) {
-    el.innerHTML = `<div class="suggestion-item"><span class="anomaly-icon">✅</span><span>Aucune anomalie détectée</span></div>`;
-    return;
-  }
-  el.innerHTML = anomalies.map(a => `
-    <div class="anomaly-item">
-      <span class="anomaly-icon">${a.severity === "error" ? "🔴" : a.severity === "warn" ? "🟡" : "🔵"}</span>
-      <div class="anomaly-text">
-        <strong>${a.scope}</strong>
-        ${a.message}
-      </div>
-    </div>
-  `).join("");
-}
+// ── Utilitaires ───────────────────────────────────────────────────────────────
 
-function updateSuggestionsUI(suggestions) {
-  const priorityIcon = { high: "🔥", medium: "💡", low: "💚" };
-  const el = document.getElementById("suggestions-list");
-  el.innerHTML = suggestions.map(s => `
-    <div class="suggestion-item">
-      <span class="anomaly-icon">${priorityIcon[s.priority]}</span>
-      <div>
-        <span class="scope-badge s${s.scope.slice(-1) || "3"}" style="margin-bottom:4px;display:inline-block">${s.scope}</span>
-        <strong style="display:block;font-size:12px">${s.action}</strong>
-        <span style="color:var(--esg-mist);font-size:10px">${s.detail}</span><br>
-        <span style="color:var(--esg-mint);font-size:10px;font-weight:600">↘ ${s.potentiel}</span>
-      </div>
-    </div>
-  `).join("");
-}
-
-// ─── Utilitaires UI ──────────────────────────────────────────────────────────
-
-/** Toast notification */
-function showToast(message, type = "info", duration = 3500) {
-  const container = document.getElementById("toast-container");
+function showToast(message, type="info", duration=3500) {
   const toast = document.createElement("div");
   toast.className = `toast ${type}`;
-  const icons = { success: "✅", error: "❌", info: "ℹ️" };
-  toast.innerHTML = `<span>${icons[type] || "ℹ️"}</span><span>${message}</span>`;
-  container.appendChild(toast);
-  setTimeout(() => {
-    toast.style.opacity = "0";
-    toast.style.transform = "translateY(8px)";
-    toast.style.transition = "all 0.3s ease";
-    setTimeout(() => toast.remove(), 300);
-  }, duration);
+  toast.innerHTML = `<span>${{success:"✅",error:"❌",info:"ℹ️"}[type]||"ℹ️"}</span><span>${message}</span>`;
+  document.getElementById("toast-container").appendChild(toast);
+  setTimeout(() => { toast.style.opacity="0"; toast.style.transform="translateY(8px)";
+    toast.style.transition="all 0.3s ease"; setTimeout(()=>toast.remove(),300); }, duration);
 }
 
-/** Log collecte */
 function log(panelId, type, message) {
-  const logEl = document.getElementById(`log-${panelId}`);
-  if (!logEl) return;
-  const ts = new Date().toLocaleTimeString("fr-FR");
+  const logEl = document.getElementById(`log-${panelId}`); if (!logEl) return;
   const entry = document.createElement("div");
   entry.className = `log-entry ${type}`;
-  entry.innerHTML = `<span class="log-ts">${ts}</span>${message}`;
-  logEl.appendChild(entry);
-  logEl.scrollTop = logEl.scrollHeight;
+  entry.innerHTML = `<span class="log-ts">${new Date().toLocaleTimeString("fr-FR")}</span>${message}`;
+  logEl.appendChild(entry); logEl.scrollTop = logEl.scrollHeight;
 }
 
-/** Bouton loading state */
 function setBtnLoading(id, loading, label) {
-  const btn = document.getElementById(id);
-  if (!btn) return;
+  const btn = document.getElementById(id); if (!btn) return;
   btn.disabled = loading;
-  btn.innerHTML = loading
-    ? `<span class="spinner"></span> ${label}`
-    : label;
+  btn.innerHTML = loading ? `<span class="spinner"></span> ${label}` : label;
 }
 
-/** Status footer */
 function setStatus(msg) {
-  const el = document.getElementById("footer-status");
-  if (el) el.textContent = msg;
+  const el = document.getElementById("footer-status"); if (el) el.textContent = msg;
 }
