@@ -59,6 +59,18 @@ async function initApp() {
   document.getElementById("btn-download-report").addEventListener("click", () => handleReport("download"));
 
   setStatus("ESG Analyzer Pro v2.0 prêt ✓");
+
+  // ── Sync Base Carbone ADEME (arrière-plan, sans bloquer l'UI) ────────────
+  if (typeof AdemeSync !== "undefined") {
+    AdemeSync.initSync((state) => {
+      const badge = document.getElementById("ademe-sync-badge");
+      if (!badge) return;
+      const { icon, text, color } = AdemeSync.formatSyncStatus(state);
+      badge.textContent = `${icon} ${text}`;
+      badge.style.color = color;
+      badge.title = `Base Carbone ADEME — ${text}`;
+    });
+  }
 }
 
 function setupNavigation() {
@@ -74,17 +86,42 @@ function setupNavigation() {
 }
 
 function populateKeysTable() {
-  const EF = CarbonCalc.EMISSION_FACTORS;
+  // Utilise CarbonFactors (base enrichie) si disponible, sinon fallback CarbonCalc
+  const getFactors = (scope) => {
+    if (typeof CarbonFactors !== "undefined") return CarbonFactors.getFactorsByScope(scope);
+    if (typeof CarbonCalc !== "undefined" && CarbonCalc.EMISSION_FACTORS)
+      return CarbonCalc.EMISSION_FACTORS[scope] || {};
+    return {};
+  };
+
   ["scope1", "scope2", "scope3"].forEach(scope => {
     const tbody = document.getElementById(`keys-${scope}`);
     if (!tbody) return;
-    Object.entries(EF[scope]).forEach(([key, ef]) => {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td style="font-family:var(--font-data);font-size:10px;color:var(--esg-mint)">${key}</td>
-        <td style="font-size:10px">${ef.label}</td>
-        <td style="font-family:var(--font-data);font-size:10px;color:var(--esg-mist)">${ef.unit}</td>`;
-      tbody.appendChild(tr);
+    tbody.innerHTML = "";
+    const factors = getFactors(scope);
+    // Grouper par catégorie pour un affichage clair
+    const byCategory = {};
+    Object.entries(factors).forEach(([key, ef]) => {
+      const cat = ef.category || "Autre";
+      if (!byCategory[cat]) byCategory[cat] = [];
+      byCategory[cat].push({ key, ef });
+    });
+    Object.entries(byCategory).forEach(([cat, items]) => {
+      // Ligne de catégorie
+      const trCat = document.createElement("tr");
+      trCat.innerHTML = `<td colspan="3" style="font-size:9px;font-weight:700;color:var(--esg-mist);
+        padding:6px 4px 2px;text-transform:uppercase;letter-spacing:0.08em">${cat}</td>`;
+      tbody.appendChild(trCat);
+      // Lignes de facteurs
+      items.forEach(({ key, ef }) => {
+        const tr = document.createElement("tr");
+        const isAPI = ef.source && ef.source.includes("API");
+        tr.innerHTML = `
+          <td style="font-family:var(--font-data);font-size:9px;color:var(--esg-mint)">${key}${isAPI ? ' <span title="Mis à jour depuis API ADEME" style="color:var(--esg-lime)">↑</span>' : ""}</td>
+          <td style="font-size:10px">${ef.label}</td>
+          <td style="font-family:var(--font-data);font-size:9px;color:var(--esg-mist)">${ef.unit}</td>`;
+        tbody.appendChild(tr);
+      });
     });
   });
 }
