@@ -346,10 +346,10 @@ function generateSuggestions(bilan) {
 
 // Export
 window.CarbonCalc = {
-  EMISSION_FACTORS,
   calcEmission,
   computeFullBilan,
   getDemoData,
   detectAnomalies,
   generateSuggestions,
+  getAvailableFactors
 };
