@@ -62,17 +62,15 @@ async function initApp() {
 
   // ── Sync Base Carbone ADEME (arrière-plan, sans bloquer l'UI) ────────────
   if (typeof AdemeSync !== "undefined") {
-
   AdemeSync.initSync((state) => {
     const el = document.getElementById("ademe-sync-status");
-
     if (el) {
       const status = AdemeSync.formatSyncStatus(state);
       el.innerHTML = `${status.icon} ${status.text}`;
       el.style.color = status.color;
     }
+    if (state.status === "synced") populateKeysTable();
   });
-
 }
 }
 

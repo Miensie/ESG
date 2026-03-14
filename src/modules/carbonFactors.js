@@ -33,7 +33,7 @@ const SCOPE1_FACTORS = {
 
   // ── Combustibles fossiles gazeux (tCO2eq / MWh PCI) ──────────────────────
   naturalGas:        { id:"31600",  factor:0.2041,  unit:"MWh",  label:"Gaz naturel",             category:"Combustibles fossiles",     source:"ADEME_V23.6" },
-  naturalGasKg:      { id:"31601",  factor:0.00202, unit:"kg",   label:"Gaz naturel (kg)",         category:"Combustibles fossiles",     source:"ADEME_V23.6" },
+  naturalGasKg:      { id:"31601",  factor:0.00264, unit:"kg",   label:"Gaz naturel (kg)",         category:"Combustibles fossiles",     source:"ADEME_V23.6" },
   naturalGasM3:      { id:"31602",  factor:0.00202, unit:"m³",   label:"Gaz naturel (m³)",         category:"Combustibles fossiles",     source:"ADEME_V23.6" },
   propane:           { id:"31610",  factor:0.2340,  unit:"MWh",  label:"Propane",                  category:"Combustibles fossiles",     source:"ADEME_V23.6" },
   butane:            { id:"31611",  factor:0.2270,  unit:"MWh",  label:"Butane",                   category:"Combustibles fossiles",     source:"ADEME_V23.6" },
