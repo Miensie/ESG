@@ -157,7 +157,7 @@ async function syncFromAPI(onStatusChange) {
   while (page * ADEME_API.pageSize < total) {
     const url = `${ADEME_API.base}/lines?size=${ADEME_API.pageSize}&skip=${page * ADEME_API.pageSize}`
       + `&select=${encodeURIComponent(Object.values(COL).join(","))}`
-      + `&qs=Statut_de_l_element:"Valide générique"`  // uniquement les facteurs validés
+      + `&qs=${encodeURIComponent('Statut_de_l_element:"Valide générique"')}`  // uniquement les facteurs validés
       + `&sort=Identifiant_de_l_element`;
 
     const data = await fetchWithTimeout(url, {});
@@ -192,8 +192,12 @@ function processAPIPage(results, target) {
   for (const row of results) {
     const id     = row[COL.id];
     const name   = row[COL.name];
-    const total  = parseFloat(row[COL.total]);
-    const unit   = normalizeUnit(row[COL.unit]);
+    const rawUnit   = row[COL.unit] || "";
+    const isKwh     = rawUnit.toLowerCase().includes("kwh") && !rawUnit.toLowerCase().includes("mwh");
+    const total     = isKwh
+      ? parseFloat(row[COL.total]) / 1000   // kWh → MWh
+      : parseFloat(row[COL.total]);
+    const unit      = normalizeUnit(rawUnit);
     const cat    = row[COL.category] || "";
 
     if (!id || isNaN(total) || total <= 0) continue;
@@ -306,12 +310,13 @@ function formatSyncStatus(state) {
   switch (state.status) {
     case "idle":     return { icon:"⏳", text:"En attente…",             color:"var(--esg-mist)" };
     case "checking": return { icon:"🔄", text:"Vérification ADEME…",     color:"var(--esg-mist)" };
-    case "synced":
+    case "synced": {
       const d = state.lastSync ? new Date(state.lastSync).toLocaleDateString("fr-FR") : "—";
       const upd = state.updatedCount > 0
         ? ` · ${state.updatedCount} facteurs mis à jour`
         : " · Base locale à jour";
       return { icon:"✅", text:`ADEME ${state.apiVersion}${upd} (${d})`, color:"var(--esg-mint)" };
+    }
     case "offline":  return { icon:"📴", text:"API hors ligne — base locale V23.6 utilisée", color:"var(--esg-warning)" };
     case "error":    return { icon:"⚠️", text:`Erreur sync : ${state.error}`, color:"var(--esg-danger)" };
     default:         return { icon:"❓", text:state.status, color:"var(--esg-mist)" };

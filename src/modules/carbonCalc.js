@@ -308,8 +308,8 @@ function generateSuggestions(bilan) {
 
   // Transport Scope 3
   const hasHighFreight = bilan.scope3.lines.some(
-    l => (l.source || "").toLowerCase().includes("fret") && l.tCO2eq > 50
-  );
+  l => l.unit === "t.km" && l.tCO2eq > 50
+);
   if (hasHighFreight) {
     suggestions.push({
       priority: "medium",
@@ -321,7 +321,9 @@ function generateSuggestions(bilan) {
   }
 
   // Déchets
-  const hasIncineration = bilan.scope3.lines.some(l => l.source.includes("Incinér"));
+  const hasIncineration = bilan.scope3.lines.some(
+  l => l.label?.toLowerCase().includes("incinér")
+);
   if (hasIncineration) {
     suggestions.push({
       priority: "medium",
