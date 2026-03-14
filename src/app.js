@@ -62,17 +62,18 @@ async function initApp() {
 
   // ── Sync Base Carbone ADEME (arrière-plan, sans bloquer l'UI) ────────────
   if (typeof AdemeSync !== "undefined") {
-    AdemeSync.init();
-    AdemeSync.onStatusChange((status) => {
-      const el = document.getElementById("ademe-sync-status");
-      if (el) el.innerHTML = AdemeSync.getStatusHTML();
-    });
-    // Affichage initial
-    setTimeout(() => {
-      const el = document.getElementById("ademe-sync-status");
-      if (el) el.innerHTML = AdemeSync.getStatusHTML();
-    }, 500);
-  }
+
+  AdemeSync.initSync((state) => {
+    const el = document.getElementById("ademe-sync-status");
+
+    if (el) {
+      const status = AdemeSync.formatSyncStatus(state);
+      el.innerHTML = `${status.icon} ${status.text}`;
+      el.style.color = status.color;
+    }
+  });
+
+}
 }
 
 function setupNavigation() {
