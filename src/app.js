@@ -62,14 +62,16 @@ async function initApp() {
 
   // ── Sync Base Carbone ADEME (arrière-plan, sans bloquer l'UI) ────────────
   if (typeof AdemeSync !== "undefined") {
-    AdemeSync.initSync((state) => {
-      const badge = document.getElementById("ademe-sync-badge");
-      if (!badge) return;
-      const { icon, text, color } = AdemeSync.formatSyncStatus(state);
-      badge.textContent = `${icon} ${text}`;
-      badge.style.color = color;
-      badge.title = `Base Carbone ADEME — ${text}`;
+    AdemeSync.init();
+    AdemeSync.onStatusChange((status) => {
+      const el = document.getElementById("ademe-sync-status");
+      if (el) el.innerHTML = AdemeSync.getStatusHTML();
     });
+    // Affichage initial
+    setTimeout(() => {
+      const el = document.getElementById("ademe-sync-status");
+      if (el) el.innerHTML = AdemeSync.getStatusHTML();
+    }, 500);
   }
 }
 
@@ -86,11 +88,12 @@ function setupNavigation() {
 }
 
 function populateKeysTable() {
-  // Utilise CarbonFactors (base enrichie) si disponible, sinon fallback CarbonCalc
+  // Utilise AdemeSync (API+cache) > CarbonFactors (base locale) en cascade
   const getFactors = (scope) => {
+    if (typeof AdemeSync     !== "undefined") return AdemeSync.getFactorsByScope(scope);
     if (typeof CarbonFactors !== "undefined") return CarbonFactors.getFactorsByScope(scope);
-    if (typeof CarbonCalc !== "undefined" && CarbonCalc.EMISSION_FACTORS)
-      return CarbonCalc.EMISSION_FACTORS[scope] || {};
+    if (typeof CarbonCalc    !== "undefined" && CarbonCalc.getAvailableFactors)
+      return CarbonCalc.getAvailableFactors(scope);
     return {};
   };
 
